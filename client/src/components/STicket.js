@@ -277,11 +277,19 @@ const STicket = () => {
       ? new Date(ticket.Expected_Completion_Date).toISOString().split("T")[0]
       : ""
   );
-  const [updatedPriority, setUpdatedPriority] = useState(ticket.Ticket_Priority || "");
+  const [updatedPriority, setUpdatedPriority] = useState(
+    ticket.Ticket_Priority || ""
+  );
   const [updatedStatus, setUpdatedStatus] = useState(ticket.TStatus || "");
-  const [updatedAssigneeDept, setUpdatedAssigneeDept] = useState(ticket.Assignee_Dept || "");
-  const [updatedAssigneeSubDept, setUpdatedAssigneeSubDept] = useState(ticket.Assignee_SubDept || "");
-  const [updatedAssigneeEmpID, setUpdatedAssigneeEmpID] = useState(ticket.Assignee_EmpID || "");
+  const [updatedAssigneeDept, setUpdatedAssigneeDept] = useState(
+    ticket.Assignee_Dept || ""
+  );
+  const [updatedAssigneeSubDept, setUpdatedAssigneeSubDept] = useState(
+    ticket.Assignee_SubDept || ""
+  );
+  const [updatedAssigneeEmpID, setUpdatedAssigneeEmpID] = useState(
+    ticket.Assignee_EmpID || ""
+  );
   const [remarks, setRemarks] = useState("");
 
   const [assigneeDepts, setAssigneeDepts] = useState([]);
@@ -355,7 +363,9 @@ const STicket = () => {
         })
         .then((response) => {
           setAssigneeEmpIDs(response.data);
-          if (!response.data.some((emp) => emp.EmpID === updatedAssigneeEmpID)) {
+          if (
+            !response.data.some((emp) => emp.EmpID === updatedAssigneeEmpID)
+          ) {
             setUpdatedAssigneeEmpID("");
           }
         })
@@ -417,7 +427,8 @@ const STicket = () => {
               <strong>Description:</strong> {ticket.Ticket_Description}
             </DetailRow>
             <DetailRow>
-              <strong>Reporter Name:</strong> {formatReporterName(ticket.Reporter_Name)}
+              <strong>Reporter Name:</strong>{" "}
+              {formatReporterName(ticket.Reporter_Name)}
             </DetailRow>
             <DetailRow>
               <strong>Reporter Email:</strong> {ticket.Reporter_Email}
@@ -469,11 +480,14 @@ const STicket = () => {
                   }}
                   onClick={async () => {
                     try {
-                      await axios.post(`${API_BASE_URL}/api/tickets/respond-resolution`, {
-                        ticketNumber: ticket.Ticket_Number,
-                        action: "accept",
-                        userID: emailUser,
-                      });
+                      await axios.post(
+                        `${API_BASE_URL}/api/tickets/respond-resolution`,
+                        {
+                          ticketNumber: ticket.Ticket_Number,
+                          action: "accept",
+                          userID: emailUser,
+                        }
+                      );
                       alert("Resolution accepted. Ticket will be closed.");
                       navigate("/profile");
                     } catch (error) {
@@ -495,12 +509,17 @@ const STicket = () => {
                   }}
                   onClick={async () => {
                     try {
-                      await axios.post(`${API_BASE_URL}/api/tickets/respond-resolution`, {
-                        ticketNumber: ticket.Ticket_Number,
-                        action: "reject",
-                        userID: emailUser,
-                      });
-                      alert("Ticket re-opened. Ticket will be marked as In-Progress.");
+                      await axios.post(
+                        `${API_BASE_URL}/api/tickets/respond-resolution`,
+                        {
+                          ticketNumber: ticket.Ticket_Number,
+                          action: "reject",
+                          userID: emailUser,
+                        }
+                      );
+                      alert(
+                        "Ticket re-opened. Ticket will be marked as In-Progress."
+                      );
                       navigate("/profile");
                     } catch (error) {
                       console.error("Error re-opening ticket:", error);
@@ -596,7 +615,10 @@ const STicket = () => {
 
             {/* Show submit button for both assignee and reporter */}
             {(isAssignee || isReporter) && (
-              <SubmitButton type="button" onClick={(e) => handleUpdateTicket(e)}>
+              <SubmitButton
+                type="button"
+                onClick={(e) => handleUpdateTicket(e)}
+              >
                 Submit
               </SubmitButton>
             )}
@@ -626,8 +648,10 @@ const STicket = () => {
                   {item.Comment ? `Comment: ${item.Comment}` : ""}
                 </div>
                 <div>
-                  <strong>Timestamp:</strong>{" "}
-                  {new Date(item.Timestamp).toLocaleString()}
+                  <strong>Timestamp:</strong>
+                  <div>
+                    {item.Timestamp.slice(0, 10)} {item.Timestamp.slice(11, 16)}
+                  </div>
                 </div>
               </HistoryItem>
             ))}

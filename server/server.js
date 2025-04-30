@@ -543,14 +543,21 @@ app.post(
         .split("T")[0]
         .replace(/-/g, "");
 
-      const ticketCountResult = await sql.query`
-          SELECT COUNT(*) AS TicketCount FROM Tickets
-          WHERE CAST(Creation_Date AS DATE) = CAST(GETDATE() AS DATE)
-            AND Ticket_Number LIKE ${tPrefix + "%"}
-        `;
-
-      const ticketCount = ticketCountResult.recordset[0].TicketCount;
-      const serialNumber = (ticketCount + 1).toString().padStart(3, "0");
+      // New logic to fetch the last appended serial number and increment by one
+      const lastTicketResult = await sql.query`
+        SELECT TOP 1 Ticket_Number FROM Tickets
+        WHERE Ticket_Number LIKE ${tPrefix + "_" + creationDateStr + "_%"}
+        ORDER BY Ticket_Number DESC
+      `;
+      let newSerial;
+      if (lastTicketResult.recordset.length === 0) {
+        newSerial = 1;
+      } else {
+        const lastTicketNumber = lastTicketResult.recordset[0].Ticket_Number;
+        const lastSerialStr = lastTicketNumber.slice(-3);
+        newSerial = parseInt(lastSerialStr, 10) + 1;
+      }
+      const serialNumber = newSerial.toString().padStart(3, "0");
 
       const ticketNumber = `${tPrefix}_${creationDateStr}_${serialNumber}`;
 
@@ -655,6 +662,51 @@ app.post(
 );
 
 app.use("/uploads", express.static("uploads"));
+
+const autoCloseTickets = async () => {
+  try {
+    await sql.connect(dbConfig);
+
+    const resolvedTicketsResult = await sql.query`
+      SELECT Ticket_Number 
+      FROM Tickets 
+      WHERE TStatus = 'Resolved'
+    `;
+    const resolvedTickets = resolvedTicketsResult.recordset;
+
+    const now = new Date();
+    let closedCount = 0;
+
+    for (const ticket of resolvedTickets) {
+
+      const historyResult = await sql.query`
+        SELECT TOP 1 Timestamp
+        FROM History
+        WHERE HTicket_Number = ${ticket.Ticket_Number}
+          AND Action_Type = 'Status'
+          AND After_State = 'Resolved'
+        ORDER BY Timestamp DESC
+      `;
+      if (historyResult.recordset.length > 0) {
+        const resolvedTime = new Date(historyResult.recordset[0].Timestamp);
+        const diffDays = (now - resolvedTime) / (1000 * 60 * 60 * 24);
+
+        if (diffDays > 7) {
+          await sql.query`
+            UPDATE Tickets
+            SET TStatus = 'Closed'
+            WHERE Ticket_Number = ${ticket.Ticket_Number}
+          `;
+          closedCount++;
+        }
+      }
+    }
+    console.log(`Auto-closed ${closedCount} ticket(s).`);
+  } catch (error) {
+    console.error("Error in auto-closing tickets:", error);
+  }
+};
+setInterval(autoCloseTickets, 1 * 60 * 1000); 
 
 // API endpoint to fetch user data
 app.get("/api/user", async (req, res) => {
