@@ -6,6 +6,7 @@ import {
   FaChevronRight,
   FaUser,
   FaBuilding,
+  FaTasks,
   FaSignOutAlt,
   FaTachometerAlt,
   FaUsers,
@@ -172,14 +173,29 @@ const Sidebar = ({ activeTab }) => {
         </SidebarItem>
 
         {isHOD && (
-          <SidebarItem
-            active={activeTab === "Department"}
-            collapsed={collapsed}
-            onClick={() => handleNavigation("/department")}
-          >
-            <FaBuilding />
-            <SidebarItemText collapsed={collapsed}>Department</SidebarItemText>
-          </SidebarItem>
+          <>
+            <SidebarItem
+              active={activeTab === "Department"}
+              collapsed={collapsed}
+              onClick={() => navigate("/department")}
+            >
+              <FaBuilding />
+              <SidebarItemText collapsed={collapsed}>
+                Department
+              </SidebarItemText>
+            </SidebarItem>
+
+            <SidebarItem
+              active={activeTab === "Assignee Mappings"}
+              collapsed={collapsed}
+              onClick={() => navigate("/assignee-mappings")}
+            >
+              <FaTasks />
+              <SidebarItemText collapsed={collapsed}>
+                Assignee Mappings
+              </SidebarItemText>
+            </SidebarItem>
+          </>
         )}
 
         <SidebarItem
@@ -197,10 +213,10 @@ const Sidebar = ({ activeTab }) => {
           onClick={() => handleNavigation("/ticket")}
         >
           <FaPenSquare />
-          <SidebarItemText collapsed={collapsed}>Create Ticket</SidebarItemText>
+          <SidebarItemText collapsed={collapsed}>
+            Create IT Ticket
+          </SidebarItemText>
         </SidebarItem>
-
-        {/* Removed Priority Tasks SidebarItem 
 
         <SidebarItem
           active={activeTab === "Team Structure"}
@@ -210,6 +226,10 @@ const Sidebar = ({ activeTab }) => {
           <FaUsers />
           <SidebarItemText collapsed={collapsed}>Team Structure</SidebarItemText>
         </SidebarItem>
+
+        {/* Removed Priority Tasks SidebarItem 
+
+
 
         <SidebarItem
           active={activeTab === "FAQ's"}

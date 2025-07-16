@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
@@ -421,6 +421,10 @@ const Dashboard = () => {
   const [assigneeEmpIDs, setAssigneeEmpIDs] = useState([]);
   const [isAssignee, setIsAssignee] = useState(false);
 
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [creationDateFilter, setCreationDateFilter] = useState("");
+  const [deadlineDateFilter, setDeadlineDateFilter] = useState("");
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -528,27 +532,13 @@ const Dashboard = () => {
 
       // Update statusData with percentage changes
       const updatedStatusData = statusDataArray.map((status) => {
-        const percentageChange = calculatePercentageChange(
-          status.count,
-          status.previousCount
-        );
-
-        let isIncrease;
-        if (["unassigned", "overdue"].includes(status.key)) {
-          // For "Date Unassigned" and "Overdue", an increase is bad
-          isIncrease = percentageChange <= 0;
-        } else {
-          // For other statuses, an increase is good
-          isIncrease = percentageChange >= 0;
-        }
-
+        // how many of this status appeared today:
+        const todayCount = (status.count || 0) - (status.previousCount || 0);
         return {
           ...status,
-          percentageChange: Math.abs(percentageChange.toFixed(2)),
-          isIncrease,
+          todayCount: todayCount > 0 ? todayCount : 0,
         };
       });
-
       setStatusDataState(updatedStatusData);
     } catch (error) {
       console.error("Error fetching tickets:", error);
@@ -658,6 +648,68 @@ const Dashboard = () => {
     }
   }, [userData]);
 
+  // SORT HANDLER
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  // APPLY SEARCH, DATE FILTERS & SORT
+  const filteredAndSorted = useMemo(() => {
+    let data = tickets;
+
+    // text search
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      data = data.filter((t) =>
+        Object.values(t).some((v) => ("" + v).toLowerCase().includes(term))
+      );
+    }
+
+    // creation-date filter
+    if (creationDateFilter) {
+      data = data.filter(
+        (t) =>
+          t.Creation_Date &&
+          new Date(t.Creation_Date).toISOString().slice(0, 10) ===
+            creationDateFilter
+      );
+    }
+
+    // deadline-date filter
+    if (deadlineDateFilter) {
+      data = data.filter(
+        (t) =>
+          t.Expected_Completion_Date &&
+          new Date(t.Expected_Completion_Date).toISOString().slice(0, 10) ===
+            deadlineDateFilter
+      );
+    }
+
+    // sort
+    if (sortConfig.key) {
+      data = [...data].sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        // missing dates go last
+        if (!aVal) return 1;
+        if (!bVal) return -1;
+        aVal = new Date(aVal).getTime();
+        bVal = new Date(bVal).getTime();
+        return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
+      });
+    }
+
+    return data;
+  }, [tickets, searchTerm, creationDateFilter, deadlineDateFilter, sortConfig]);
+
   const handleModalSubmit = async () => {
     try {
       const updatedTicketData = {
@@ -722,15 +774,16 @@ const Dashboard = () => {
                       gap: "10px",
                     }}
                   >
-                    <StatusCount>{status.count || 0}</StatusCount>
-                    <PercentageChange isIncrease={status.isIncrease}>
-                      {status.isIncrease ? (
-                        <FaArrowUp style={{ marginRight: "5px" }} />
-                      ) : (
-                        <FaArrowDown style={{ marginRight: "5px" }} />
-                      )}
-                      {status.percentageChange}%
-                    </PercentageChange>
+                    <StatusCount>{status.count || 0}</StatusCount>+{" "}
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#777",
+                        marginTop: "5px",
+                      }}
+                    >
+                      {status.todayCount} new today
+                    </div>
                   </div>
                 </StatusCard>
               ))}
@@ -753,7 +806,7 @@ const Dashboard = () => {
                   active={viewMode === "assignedByMe"}
                   onClick={() => handleViewModeChange("assignedByMe")}
                 >
-                  Assigned by Me
+                  Created by Me
                 </Button>
                 <Button
                   active={viewMode === "assignedToMe"}
@@ -775,21 +828,72 @@ const Dashboard = () => {
           <Table>
             <thead>
               <tr>
-                <TableHeader><tno>Ticket Number</tno></TableHeader>
-                <TableHeader>Creation Date</TableHeader>
+                <TableHeader>
+                  <tno>Ticket Number</tno>
+                </TableHeader>
+                {/* Creation Date */}
+                <TableHeader onClick={() => handleSort("Creation_Date")}>
+                  Creation Date{" "}
+                  {sortConfig.key === "Creation_Date"
+                    ? sortConfig.direction === "asc"
+                      ? "↑"
+                      : "↓"
+                    : ""}
+                  <br />
+                  <Input
+                    type="date"
+                    value={creationDateFilter}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setCreationDateFilter(e.target.value)}
+                    style={{ fontSize: 12, marginTop: 4 }}
+                  />
+                </TableHeader>
+
                 <TableHeader>Ticket Title</TableHeader>
                 <TableHeader>Priority</TableHeader>
                 <TableHeader>
-                  {viewMode === "assignedToMe" ? "Assigned By" : "Assigned To"}
+                  {viewMode === "assignedToMe"
+                    ? "Assigned By"
+                    : "Created By Me"}
                 </TableHeader>
-                <TableHeader>Deadline</TableHeader>
+                {/* Deadline */}
+                <TableHeader
+                  onClick={() => handleSort("Expected_Completion_Date")}
+                >
+                  Deadline{" "}
+                  {sortConfig.key === "Expected_Completion_Date"
+                    ? sortConfig.direction === "asc"
+                      ? "↑"
+                      : "↓"
+                    : ""}
+                  <br />
+                  <Input
+                    type="date"
+                    value={deadlineDateFilter}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setDeadlineDateFilter(e.target.value)}
+                    style={{ fontSize: 12, marginTop: 4 }}
+                  />
+                </TableHeader>
                 <TableHeader>Status</TableHeader>
                 <TableHeader>Action</TableHeader>
               </tr>
             </thead>
             <tbody>
-              {(filteredTickets || []).map((ticket) => (
-                <tr key={ticket.Ticket_Number} onClick={() => handleActionClick(ticket)}>
+              {filteredAndSorted.map((ticket) => (
+                <tr
+                  key={ticket.Ticket_Number}
+                  onClick={() =>
+                    navigate(`/ticket/${ticket.Ticket_Number}`, {
+                      state: {
+                        ticket,
+                        emailUser: `${localStorage.getItem(
+                          "username"
+                        )}@premierenergies.com`,
+                      },
+                    })
+                  }
+                >
                   <TableData>{ticket.Ticket_Number}</TableData>
                   <TableData>
                     {ticket.Creation_Date
@@ -802,43 +906,39 @@ const Dashboard = () => {
                   <TableData>{ticket.Ticket_Priority}</TableData>
                   <TableData>
                     {viewMode === "assignedToMe"
-                      ? ticket.Reporter_Name // Use Reporter_Name in "Assigned By" view
+                      ? ticket.Reporter_Name
                       : ticket.Assignee_Name}{" "}
                   </TableData>
                   <TableData>
-                    {ticket.Expected_Completion_Date
+                    {ticket.TStatus === "Closed" ||
+                    ticket.TStatus === "Resolved"
+                      ? "Closed"
+                      : ticket.Expected_Completion_Date
                       ? (() => {
                           const expectedDate = new Date(
                             ticket.Expected_Completion_Date
                           );
                           const currentDate = new Date();
-                          // Reset time components to midnight to avoid partial day differences
                           expectedDate.setHours(0, 0, 0, 0);
                           currentDate.setHours(0, 0, 0, 0);
-                          const timeDiff = expectedDate - currentDate;
                           const daysDiff = Math.ceil(
-                            timeDiff / (1000 * 60 * 60 * 24)
+                            (expectedDate - currentDate) / (1000 * 60 * 60 * 24)
                           );
-
-                          if (daysDiff > 0) {
+                          if (daysDiff > 0)
                             return `In ${daysDiff} day${
                               daysDiff !== 1 ? "s" : ""
                             }`;
-                          } else if (daysDiff === 0) {
-                            return "Today";
-                          } else {
-                            return `Overdue by ${Math.abs(daysDiff)} day${
-                              Math.abs(daysDiff) !== 1 ? "s" : ""
-                            }`;
-                          }
+                          if (daysDiff === 0) return "Today";
+                          return `Overdue by ${Math.abs(daysDiff)} day${
+                            Math.abs(daysDiff) !== 1 ? "s" : ""
+                          }`;
                         })()
                       : "N/A"}
                   </TableData>
                   <TableData>{ticket.TStatus}</TableData>
                   <TableData>
-                    <ActionIcon onClick={() => handleActionClick(ticket)} />
+                    <ActionIcon />
                   </TableData>
-                  
                 </tr>
               ))}
             </tbody>

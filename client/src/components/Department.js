@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
@@ -411,6 +411,12 @@ const DepartmentDashboard = () => {
   const [statusCounts, setStatusCounts] = useState({});
   const [viewMode, setViewMode] = useState("assignedByDept");
   const [statusDataState, setStatusDataState] = useState([]);
+
+  // sorting + date filters
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [creationDateFilter, setCreationDateFilter] = useState("");
+  const [deadlineDateFilter, setDeadlineDateFilter] = useState("");
+
   // Editable fields (if any modal is used)
   const [updatedStatus, setUpdatedStatus] = useState("");
   const [updatedAssigneeDept, setUpdatedAssigneeDept] = useState("");
@@ -451,91 +457,43 @@ const DepartmentDashboard = () => {
 
   const fetchTickets = async (mode, department) => {
     try {
-      // Use the existing endpoint that takes a department parameter.
+      // 1. Fetch tickets + counts
       const response = await axios.get(`${API_BASE_URL}/api/tickets`, {
-        params: {
-          mode,
-          department,
-        },
+        params: { mode, department },
       });
-      setTickets(response.data.tickets);
-      setFilteredTickets(response.data.tickets);
-      setStatusCounts(response.data.statusCounts);
-      const previousCounts = response.data.previousStatusCounts || {};
+
+      const tickets = response.data.tickets || [];
       const currentCounts = response.data.statusCounts || {};
-      const calculatePercentageChange = (current, previous) => {
-        if (previous === 0) {
-          if (current === 0) return 0;
-          return 100;
-        }
-        return ((current - previous) / previous) * 100;
-      };
-      const statusDataArray = [
-        {
-          key: "total",
-          title: "Total",
-          color: "#FF6F61",
-          count: currentCounts.total || 0,
-          previousCount: previousCounts.total || 0,
-        },
-        {
-          key: "unassigned",
-          title: "Date Unassigned",
-          color: "#FBC02D",
-          count: currentCounts.unassigned || 0,
-          previousCount: previousCounts.unassigned || 0,
-        },
-        {
-          key: "inProgress",
-          title: "In-Progress",
-          color: "#4CAF50",
-          count: currentCounts.inProgress || 0,
-          previousCount: previousCounts.inProgress || 0,
-        },
-        {
-          key: "overdue",
-          title: "Overdue",
-          color: "#E53935",
-          count: currentCounts.overdue || 0,
-          previousCount: previousCounts.overdue || 0,
-        },
-        {
-          key: "resolved",
-          title: "Resolved",
-          color: "#1E88E5",
-          count: currentCounts.resolved || 0,
-          previousCount: previousCounts.resolved || 0,
-        },
-        {
-          key: "closed",
-          title: "Closed",
-          color: "#8E24AA",
-          count: currentCounts.closed || 0,
-          previousCount: previousCounts.closed || 0,
-        },
+      const previousCounts = response.data.previousStatusCounts || {};
+
+      // 2. Store tickets
+      setTickets(tickets);
+      setFilteredTickets(tickets);
+
+      // 3. Build status template
+      const statusTemplate = [
+        { key: "total", title: "Total", color: "#FF6F61" },
+        { key: "unassigned", title: "Unassigned", color: "#FBC02D" },
+        { key: "inProgress", title: "In‑Progress", color: "#4CAF50" },
+        { key: "overdue", title: "Overdue", color: "#E53935" },
+        { key: "resolved", title: "Resolved", color: "#1E88E5" },
+        { key: "closed", title: "Closed", color: "#8E24AA" },
       ];
-      const updatedStatusData = statusDataArray.map((status) => {
-        const percentageChange = calculatePercentageChange(
-          status.count,
-          status.previousCount
-        );
-        let isIncrease;
-        if (["unassigned", "overdue"].includes(status.key)) {
-          isIncrease = percentageChange <= 0;
-        } else {
-          isIncrease = percentageChange >= 0;
-        }
-        return {
-          ...status,
-          percentageChange: Math.abs(percentageChange.toFixed(2)),
-          isIncrease,
-        };
+
+      // 4. Compute todayCount = current – previous (never negative)
+      const updatedStatusData = statusTemplate.map((s) => {
+        const count = currentCounts[s.key] || 0;
+        const prev = previousCounts[s.key] || 0;
+        const todayCount = Math.max(0, count - prev);
+        return { ...s, count, todayCount };
       });
+
+      // 5. Update state
       setStatusDataState(updatedStatusData);
     } catch (error) {
       console.error("Error fetching tickets:", error);
       setTickets([]);
-      setStatusCounts({});
+      setFilteredTickets([]);
       setStatusDataState([]);
     }
   };
@@ -544,23 +502,54 @@ const DepartmentDashboard = () => {
     navigate("/ticket");
   };
 
-  const handleSearch = (e) => {
-    const term = e.target.value.toLowerCase();
-    setSearchTerm(term);
-    if (!term) {
-      setFilteredTickets(tickets);
-      return;
-    }
-    const filtered = tickets.filter((ticket) =>
-      Object.values(ticket).some((value) => {
-        if (value === null || value === undefined) return false;
-        if (typeof value !== "string" && typeof value !== "number")
-          return false;
-        return value.toString().toLowerCase().includes(term);
-      })
+  // sort handler
+  const handleSort = (key) => {
+    setSortConfig((sc) =>
+      sc.key === key
+        ? { key, direction: sc.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: "asc" }
     );
-    setFilteredTickets(filtered);
   };
+
+  // combined filter+sort
+  const filteredAndSorted = useMemo(() => {
+    let data = tickets;
+
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      data = data.filter((ti) =>
+        Object.values(ti).some((v) => ("" + v).toLowerCase().includes(t))
+      );
+    }
+    if (creationDateFilter) {
+      data = data.filter(
+        (ti) =>
+          ti.Creation_Date &&
+          new Date(ti.Creation_Date).toISOString().slice(0, 10) ===
+            creationDateFilter
+      );
+    }
+    if (deadlineDateFilter) {
+      data = data.filter(
+        (ti) =>
+          ti.Expected_Completion_Date &&
+          new Date(ti.Expected_Completion_Date).toISOString().slice(0, 10) ===
+            deadlineDateFilter
+      );
+    }
+    if (sortConfig.key) {
+      data = [...data].sort((a, b) => {
+        let aV = a[sortConfig.key],
+          bV = b[sortConfig.key];
+        if (!aV) return 1;
+        if (!bV) return -1;
+        aV = new Date(aV).getTime();
+        bV = new Date(bV).getTime();
+        return sortConfig.direction === "asc" ? aV - bV : bV - aV;
+      });
+    }
+    return data;
+  }, [tickets, searchTerm, creationDateFilter, deadlineDateFilter, sortConfig]);
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
@@ -601,22 +590,15 @@ const DepartmentDashboard = () => {
               {statusDataState.map((status, index) => (
                 <StatusCard key={index} color={status.color}>
                   <StatusTitle>{status.title}</StatusTitle>
+                  <StatusCount>{status.count || 0}</StatusCount>
                   <div
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
+                      fontSize: "14px",
+                      color: "#777",
+                      marginTop: "5px",
                     }}
                   >
-                    <StatusCount>{status.count || 0}</StatusCount>
-                    <PercentageChange isIncrease={status.isIncrease}>
-                      {status.isIncrease ? (
-                        <FaArrowUp style={{ marginRight: "5px" }} />
-                      ) : (
-                        <FaArrowDown style={{ marginRight: "5px" }} />
-                      )}
-                      {status.percentageChange}%
-                    </PercentageChange>
+                    {status.todayCount} new today
                   </div>
                 </StatusCard>
               ))}
@@ -629,14 +611,14 @@ const DepartmentDashboard = () => {
                 type="text"
                 placeholder="Search Department Tickets"
                 value={searchTerm}
-                onChange={handleSearch}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </SearchBar>
             <Button
               active={viewMode === "assignedByDept"}
               onClick={() => handleViewModeChange("assignedByDept")}
             >
-              Assigned by Department
+              Created by Department
             </Button>
             <Button
               active={viewMode === "assignedToDept"}
@@ -649,67 +631,106 @@ const DepartmentDashboard = () => {
             <thead>
               <tr>
                 <TableHeader>Ticket Number</TableHeader>
-                <TableHeader>Creation Date</TableHeader>
+                {/* Creation Date with sort & filter */}
+                <TableHeader onClick={() => handleSort("Creation_Date")}>
+                  Creation Date{" "}
+                  {sortConfig.key === "Creation_Date"
+                    ? sortConfig.direction === "asc"
+                      ? "↑"
+                      : "↓"
+                    : ""}
+                  <br />
+                  <Input
+                    type="date"
+                    value={creationDateFilter}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setCreationDateFilter(e.target.value)}
+                    style={{ fontSize: 12, marginTop: 4 }}
+                  />
+                </TableHeader>
                 <TableHeader>Ticket Title</TableHeader>
                 <TableHeader>Priority</TableHeader>
                 <TableHeader>
-                  {viewMode === "assignedToDept"
-                    ? "Assigned By"
-                    : "Assigned To"}
+                  {viewMode === "assignedToDept" ? "Assigned By" : "Created By"}
                 </TableHeader>
-                <TableHeader>Deadline</TableHeader>
+                {/* Deadline with sort & filter */}
+                <TableHeader
+                  onClick={() => handleSort("Expected_Completion_Date")}
+                >
+                  Deadline{" "}
+                  {sortConfig.key === "Expected_Completion_Date"
+                    ? sortConfig.direction === "asc"
+                      ? "↑"
+                      : "↓"
+                    : ""}
+                  <br />
+                  <Input
+                    type="date"
+                    value={deadlineDateFilter}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setDeadlineDateFilter(e.target.value)}
+                    style={{ fontSize: 12, marginTop: 4 }}
+                  />
+                </TableHeader>
                 <TableHeader>Status</TableHeader>
                 <TableHeader>Action</TableHeader>
               </tr>
             </thead>
             <tbody>
-              {(filteredTickets || []).map((ticket) => (
-                <tr key={ticket.Ticket_Number}>
-                  <TableData>{ticket.Ticket_Number}</TableData>
+              {filteredAndSorted.map((t) => (
+                <tr
+                  key={t.Ticket_Number}
+                  onClick={() =>
+                    navigate(`/ticket/${t.Ticket_Number}`, {
+                      state: {
+                        ticket: t,
+                        emailUser: `${localStorage.getItem(
+                          "username"
+                        )}@premierenergies.com`,
+                      },
+                    })
+                  }
+                >
+                  <TableData>{t.Ticket_Number}</TableData>
                   <TableData>
-                    {ticket.Creation_Date
-                      ? new Date(ticket.Creation_Date)
-                          .toISOString()
-                          .split("T")[0]
+                    {t.Creation_Date
+                      ? new Date(t.Creation_Date).toISOString().split("T")[0]
                       : "N/A"}
                   </TableData>
-                  <TableData>{ticket.Ticket_Title}</TableData>
-                  <TableData>{ticket.Ticket_Priority}</TableData>
+                  <TableData>{t.Ticket_Title}</TableData>
+                  <TableData>{t.Ticket_Priority}</TableData>
                   <TableData>
                     {viewMode === "assignedToDept"
-                      ? formatReporterName(ticket.Reporter_Name)
-                      : ticket.Assignee_Name}
+                      ? formatReporterName(t.Reporter_Name)
+                      : t.Assignee_Name}
                   </TableData>
+                  {/* 6. Deadline */}
                   <TableData>
-                    {ticket.Expected_Completion_Date
+                    {t.TStatus === "Closed" || t.TStatus === "Resolved"
+                      ? "Closed"
+                      : t.Expected_Completion_Date
                       ? (() => {
-                          const expectedDate = new Date(
-                            ticket.Expected_Completion_Date
+                          const ed = new Date(t.Expected_Completion_Date);
+                          const today = new Date();
+                          ed.setHours(0, 0, 0, 0);
+                          today.setHours(0, 0, 0, 0);
+                          const diff = Math.ceil(
+                            (ed - today) / (1000 * 60 * 60 * 24)
                           );
-                          const currentDate = new Date();
-                          expectedDate.setHours(0, 0, 0, 0);
-                          currentDate.setHours(0, 0, 0, 0);
-                          const timeDiff = expectedDate - currentDate;
-                          const daysDiff = Math.ceil(
-                            timeDiff / (1000 * 60 * 60 * 24)
-                          );
-                          if (daysDiff > 0) {
-                            return `In ${daysDiff} day${
-                              daysDiff !== 1 ? "s" : ""
-                            }`;
-                          } else if (daysDiff === 0) {
-                            return "Today";
-                          } else {
-                            return `Overdue by ${Math.abs(daysDiff)} day${
-                              Math.abs(daysDiff) !== 1 ? "s" : ""
-                            }`;
-                          }
+                          if (diff > 0)
+                            return `In ${diff} day${diff !== 1 ? "s" : ""}`;
+                          if (diff === 0) return "Today";
+                          return `Overdue by ${Math.abs(diff)} day${
+                            Math.abs(diff) !== 1 ? "s" : ""
+                          }`;
                         })()
                       : "N/A"}
                   </TableData>
-                  <TableData>{ticket.TStatus}</TableData>
+
+                  {/* 7. Status */}
+                  <TableData>{t.TStatus}</TableData>
                   <TableData>
-                    <ActionIcon onClick={() => handleActionClick(ticket)} />
+                    <ActionIcon />
                   </TableData>
                 </tr>
               ))}

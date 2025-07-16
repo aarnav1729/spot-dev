@@ -1,9 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import SVideo from "../assets/right.mp4";
 import axios from "axios";
-const API_BASE_URL = window.location.origin; 
+
+axios.defaults.withCredentials = true; // Ensure cookies are sent with requests
+
+// point at DIGI’s API; override in .env as needed
+const DIGI_API_URL = "https://digi.premierenergies.com:10443";
+
+const API_BASE_URL = window.location.origin;
 const Container = styled.div`
   display: flex;
   flex-direction: column;
@@ -143,43 +149,60 @@ const ErrorMessage = styled.p`
   text-align: center;
 `;
 
-const Login = () => {
+export default function Login() {
   const navigate = useNavigate();
   const [emailUser, setEmailUser] = useState("");
   const [password, setPassword] = useState("");
-  const [empID, setEmpID] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const handleForgotPassword = () => {
-    navigate("/forgot-password");
-  };
+  // if we already have an empID, skip straight in
+  useEffect(() => {
+    if (localStorage.getItem("empID")) {
+      navigate("/profile");
+    }
+  }, [navigate]);
+
+  // SSO ping to DIGI
+  useEffect(() => {
+    axios
+      .get(`${DIGI_API_URL}/api/session`)
+      .then(({ data }) => {
+        if (data.loggedIn) {
+          const userPart = data.email.split("@")[0];
+          localStorage.setItem("username", userPart);
+          localStorage.setItem("empID", data.empID.toString());
+          navigate("/profile");
+        }
+      })
+      .catch(() => {
+        // swallow network errors
+      });
+  }, [navigate]);
+
+  const handleForgotPassword = () => navigate("/forgot-password");
 
   const handleEmailChange = (e) => {
-    // Prevent the user from typing '@' and beyond
-    const value = e.target.value.split("@")[0];
-    setEmailUser(value);
+    setEmailUser(e.target.value.split("@")[0]);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
-
     try {
-      const response = await axios.post(
+      const resp = await axios.post(
         `${API_BASE_URL}/api/login`,
         { email: emailUser, password },
         { headers: { "Content-Type": "application/json" } }
       );
-
       localStorage.setItem("username", emailUser);
-      localStorage.setItem("empID", response.data.empID);
+      localStorage.setItem("empID", resp.data.empID);
       navigate("/profile");
-    } catch (error) {
-      if (error.response && error.response.status === 401) {
+    } catch (err) {
+      if (err.response?.status === 401) {
         setErrorMessage("Invalid username or password");
       } else {
         setErrorMessage("An error occurred. Please try again.");
-        console.error("Login error:", error);
+        console.error(err);
       }
     }
   };
@@ -190,7 +213,6 @@ const Login = () => {
         <LeftHalf>
           <Video autoPlay loop muted playsInline>
             <source src={SVideo} type="video/mp4" />
-            Your browser does not support the video tag.
           </Video>
         </LeftHalf>
         <RightHalf>
@@ -199,9 +221,8 @@ const Login = () => {
             <Label htmlFor="username">Username</Label>
             <EmailInputContainer>
               <EmailInput
-                type="text"
                 id="username"
-                name="username"
+                type="text"
                 placeholder="Enter your username"
                 value={emailUser}
                 onChange={handleEmailChange}
@@ -213,7 +234,6 @@ const Login = () => {
             <Input
               type="password"
               id="password"
-              name="password"
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -229,6 +249,4 @@ const Login = () => {
       </Content>
     </Container>
   );
-};
-
-export default Login;
+}

@@ -15,18 +15,20 @@ import Priority from './components/Priority';
 import Notifs from './components/Notifs';
 import Dashboard from './components/Dashboard';
 import STicket from './components/STicket';
+import AssigneeMappings from './components/AssigneeMappings';
 
 function App() {
   return (
     <Router>
       <Header />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<Profile />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/department" element={<Department />} />
+        <Route path="/assignee-mappings" element={<AssigneeMappings />} />
         <Route path="/ticket" element={<Ticket />} />
         <Route path="/ticket/:ticketNumber" element={<STicket />} />
         <Route path="/faqs" element={<FAQs />} />

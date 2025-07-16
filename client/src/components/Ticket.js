@@ -25,6 +25,13 @@ const TitleInput = styled.input`
     width: 80%;
   }
 `;
+const FieldHeader = styled.h3`
+  width: 100%;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 20px 0 8px;
+  color: #0f6ab0;
+`;
 
 const Content = styled.div`
   flex: 1;
@@ -150,15 +157,23 @@ const CreateTicketPage = () => {
   const [subTasks, setSubTasks] = useState([]);
   const [taskLabels, setTaskLabels] = useState([]);
 
-  const [selectedDepartment, setSelectedDepartment] = useState("");
-  const [selectedSubDepartment, setSelectedSubDepartment] = useState("");
+  const [selectedDepartment] = useState("IT");
+  const [selectedSubDepartment] = useState("IT");
   const [selectedSubTask, setSelectedSubTask] = useState("");
   const [selectedTaskLabel, setSelectedTaskLabel] = useState("");
 
   const [ticketTitle, setTicketTitle] = useState("");
 
+  const [incidentDate, setIncidentDate] = useState("");
+  const [incidentTime, setIncidentTime] = useState("");
+
   const [ticketPriority, setTicketPriority] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
+
+  // new state for "on behalf"
+  const [assignees, setAssignees] = useState([]);
+  const [createdForEmail, setCreatedForEmail] = useState("");
+  const [isAssigneeUser, setIsAssigneeUser] = useState(false);
 
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -168,14 +183,29 @@ const CreateTicketPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Retrieve the logged-in user's username from localStorage
     const storedUsername = localStorage.getItem("username");
     if (!storedUsername) {
-      // If no user is logged in, redirect to login page
       navigate("/login");
-    } else {
-      setReporterEmail(storedUsername);
+      return;
     }
+    setReporterEmail(storedUsername);
+
+    // check if current user can create on behalf
+    axios
+      .get(`${API_BASE_URL}/api/user?email=${storedUsername}`)
+      .then((res) =>
+        axios.get(`${API_BASE_URL}/api/isAssignee?empID=${res.data.EmpID}`)
+      )
+      .then((res) => {
+        setIsAssigneeUser(res.data.isAssignee);
+        if (res.data.isAssignee) {
+          axios
+            .get(`${API_BASE_URL}/api/assignees`)
+            .then((r) => setAssignees(r.data))
+            .catch((err) => console.error("Error fetching assignees:", err));
+        }
+      })
+      .catch((err) => console.error("Auth check failed:", err));
   }, [navigate]);
 
   // Fetch departments on component mount
@@ -209,7 +239,7 @@ const CreateTicketPage = () => {
     // Reset dependent fields
     setSubTasks([]);
     setTaskLabels([]);
-    setSelectedSubDepartment("");
+
     setSelectedSubTask("");
     setSelectedTaskLabel("");
   }, [selectedDepartment]);
@@ -274,6 +304,13 @@ const CreateTicketPage = () => {
     formData.append("priority", ticketPriority);
     formData.append("description", ticketDescription);
     formData.append("reporterEmail", reporterEmail);
+    formData.append("incidentReportedDate", incidentDate);
+    formData.append("incidentReportedTime", incidentTime);
+
+    // attach createdForEmail if provided
+    if (isAssigneeUser && createdForEmail) {
+      formData.append("createdForEmail", createdForEmail);
+    }
 
     // Append each attachment if provided (allowing multiple files)
     if (attachments) {
@@ -292,8 +329,7 @@ const CreateTicketPage = () => {
 
         // Clear form fields
         setTicketTitle("");
-        setSelectedDepartment("");
-        setSelectedSubDepartment("");
+
         setSelectedSubTask("");
         setSelectedTaskLabel("");
         setTicketPriority("");
@@ -315,112 +351,128 @@ const CreateTicketPage = () => {
   };
 
   return (
-    <div>
-      <Container>
-        <Sidebar activeTab="Create Ticket" />
-        <Content>
-          <Title>Create New Ticket</Title>
-          <Subtitle>
-            All fields are mandatory and must be filled before ticket submission
-          </Subtitle>
-          <Form onSubmit={handleSubmit}>
-            <InputRow>
+    <Container>
+      <Sidebar activeTab="Create Ticket" />
+      <Content>
+        <Title>Create New Incident</Title>
+        <Subtitle>
+          All fields are mandatory and must be filled before ticket submission
+        </Subtitle>
+        <Form onSubmit={handleSubmit}>
+          {isAssigneeUser && (
+            <>
+              <FieldHeader>Created For (username):</FieldHeader>
               <TitleInput
                 type="text"
-                placeholder="Ticket Title:"
+                placeholder="Enter username (without @…)"
                 required
-                value={ticketTitle}
-                onChange={(e) => setTicketTitle(e.target.value)}
+                value={createdForEmail}
+                onChange={(e) => setCreatedForEmail(e.target.value)}
               />
+            </>
+          )}
 
-              <Select
-                required
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-              >
-                <option value="">Department:</option>
-                {departments.map((dept, index) => (
-                  <option key={index} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                required
-                value={selectedSubDepartment}
-                onChange={(e) => setSelectedSubDepartment(e.target.value)}
-              >
-                <option value="">Sub-Department:</option>
-                {subDepartments.map((subDept, index) => (
-                  <option key={index} value={subDept}>
-                    {subDept}
-                  </option>
-                ))}
-              </Select>
+          <FieldHeader>Title:</FieldHeader>
+          <TitleInput
+            type="text"
+            placeholder="Enter ticket title"
+            required
+            value={ticketTitle}
+            onChange={(e) => setTicketTitle(e.target.value)}
+          />
+
+          <InputRow>
+            <div style={{ flex: 1 }}>
+              <FieldHeader>Category:</FieldHeader>
               <Select
                 required
                 value={selectedSubTask}
                 onChange={(e) => setSelectedSubTask(e.target.value)}
               >
-                <option value="">Category:</option>
-                {subTasks.map((subTask, index) => (
-                  <option key={index} value={subTask}>
-                    {subTask}
-                  </option>
-                ))}
+                <option value="">Select category</option>
+                {(Array.isArray(subTasks) ? subTasks : []).map(
+                  (subTask, index) => (
+                    <option key={index} value={subTask}>
+                      {subTask}
+                    </option>
+                  )
+                )}
               </Select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <FieldHeader>Sub-Category:</FieldHeader>
               <Select
                 required
                 value={selectedTaskLabel}
                 onChange={(e) => setSelectedTaskLabel(e.target.value)}
               >
-                <option value="">Sub-Category:</option>
-                {taskLabels.map((label, index) => (
-                  <option key={index} value={label}>
-                    {label}
-                  </option>
-                ))}
+                <option value="">Select sub-category</option>
+                {(Array.isArray(taskLabels) ? taskLabels : []).map(
+                  (label, index) => (
+                    <option key={index} value={label}>
+                      {label}
+                    </option>
+                  )
+                )}
               </Select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <FieldHeader>Priority:</FieldHeader>
               <Select
                 required
                 value={ticketPriority}
                 onChange={(e) => setTicketPriority(e.target.value)}
               >
-                <option value="">Ticket Priority:</option>
+                <option value="">Select priority</option>
                 <option value="High">High</option>
                 <option value="Medium">Medium</option>
                 <option value="Low">Low</option>
               </Select>
-            </InputRow>
-            <TextArea
-              placeholder="Ticket Description:"
-              required
-              value={ticketDescription}
-              onChange={(e) => setTicketDescription(e.target.value)}
-            ></TextArea>
-
-            <div style={{ margin: "10px 0" }}>
-              <label style={{ marginRight: "10px" }}>Attachments:</label>
-              <input
-                type="file"
-                name="attachments"
-                onChange={(e) => setAttachments(e.target.files)}
-                multiple
+            </div>
+            <div style={{ flex: 1 }}>
+              <FieldHeader>Incident Date:</FieldHeader>
+              <Input
+                required
+                type="date"
+                value={incidentDate}
+                onChange={(e) => setIncidentDate(e.target.value)}
               />
             </div>
+            <div style={{ flex: 1 }}>
+              <FieldHeader>Incident Time:</FieldHeader>
+              <Input
+                required
+                type="time"
+                value={incidentTime}
+                onChange={(e) => setIncidentTime(e.target.value)}
+              />
+            </div>
+          </InputRow>
 
-            <SubmitButton type="submit">Create Ticket</SubmitButton>
-          </Form>
-          {successMessage && (
-            <Message success>{successMessage}</Message>
-          )}
-          {errorMessage && (
-            <Message>{errorMessage}</Message>
-          )}
-        </Content>
-      </Container>
-    </div>
+          <FieldHeader>Description:</FieldHeader>
+          <TextArea
+            placeholder="Enter ticket description"
+            required
+            value={ticketDescription}
+            onChange={(e) => setTicketDescription(e.target.value)}
+          />
+
+          <FieldHeader>Attachments:</FieldHeader>
+          <div style={{ margin: "10px 0" }}>
+            <input
+              type="file"
+              name="attachments"
+              onChange={(e) => setAttachments(e.target.files)}
+              multiple
+            />
+          </div>
+
+          <SubmitButton type="submit">Create Ticket</SubmitButton>
+        </Form>
+        {successMessage && <Message success>{successMessage}</Message>}
+        {errorMessage && <Message>{errorMessage}</Message>}
+      </Content>
+    </Container>
   );
 };
-
 export default CreateTicketPage;

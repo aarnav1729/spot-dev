@@ -6,6 +6,7 @@ const { Client } = require("@microsoft/microsoft-graph-client");
 const { ClientSecretCredential } = require("@azure/identity");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
+const http = require("http");
 const https = require("https");
 const fs = require("fs");
 require("isomorphic-fetch");
@@ -15,29 +16,28 @@ dotenv.config();
 const app = express();
 const path = require("path");
 
-// Use CORS to allow requests from the frontend
-app.use(
-  cors({
-    origin: [
-      "http://localhost:3000",
-      "http://14.194.111.58:3000",
-      "http://spot.premierenergies.com",
-      "http://spot.premierenergies.com:3000",
-      "http://spot.premierenergies.com/login",
-      "https://14.194.111.58:3000",
-      "https://spot.premierenergies.com",
-      "https://spot.premierenergies.com:3000",
-      "https://spot.premierenergies.com/login",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // <-- add OPTIONS
-    credentials: true,
-  })
-);
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://spot.premierenergies.com:10443",
+  "https://digi.premierenergies.com",
+  "https://14.194.111.58:3000",
+];
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, OPTIONS"
+    );
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 
-// Also allow the server to respond to preflight automatically:
-app.options("*", cors());
-
-app.use(express.json()); // Middleware to parse JSON
+app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "client", "build")));
 
 // Database configuration
@@ -147,6 +147,13 @@ async function sendEmail(toEmail, subject, content, attachments = []) {
   }
 }
 
+// ── SESSION CHECK FOR FRONTEND ─────────────────────────────────────────────────
+// (so React can read /api/session if you choose—but SPOT keeps its own login)
+app.get("/api/session", (req, res) => {
+  // SPOT doesn’t use server-side sessions here, but you could mirror DIGI if needed
+  res.json({ loggedIn: false });
+});
+
 // API endpoint to handle OTP requests
 // API endpoint to handle OTP requests
 app.post("/api/send-otp", async (req, res) => {
@@ -198,12 +205,10 @@ app.post("/api/send-otp", async (req, res) => {
 
       res.status(200).json({ message: "OTP sent successfully" });
     } else {
-      res
-        .status(404)
-        .json({
-          message:
-            "We do not have a @premierenergies email address registered for you. If you have a company email ID, please contact HR to get it updated or contact your manager to raise a ticket on your behalf.",
-        });
+      res.status(404).json({
+        message:
+          "We do not have a @premierenergies email address registered for you. If you have a company email ID, please contact HR to get it updated or contact your manager to raise a ticket on your behalf.",
+      });
     }
   } catch (error) {
     console.error("Error:", error);
@@ -408,7 +413,6 @@ app.post(
   async (req, res) => {
     const {
       title,
-      type,
       department,
       subDepartment,
       subTask,
@@ -416,86 +420,61 @@ app.post(
       priority,
       description,
       reporterEmail,
+      createdForEmail,
+      incidentReportedDate,
+      incidentReportedTime,
     } = req.body;
 
-    // Log files if provided
-    if (req.files && req.files.length > 0) {
-      console.log("Received attachments:", req.files);
-    }
-    // Choose the first attachment's filename if any
+    // Determine which username to use as reporter
+    const reporterUsername = createdForEmail
+      ? createdForEmail.trim()
+      : reporterEmail.trim();
+
+    // Build the full email address
+    const fullReporterEmail = reporterUsername.includes("@")
+      ? reporterUsername
+      : `${reporterUsername}@premierenergies.com`;
+
+    // Save attachments
     const attachmentFile =
       req.files && req.files.length > 0 ? req.files[0].filename : null;
-
-    const fullReporterEmail = `${reporterEmail}@premierenergies.com`;
 
     try {
       await sql.connect(dbConfig);
 
-      console.log("Received ticket creation request with data:", {
-        title,
-        type,
-        department,
-        subDepartment,
-        subTask,
-        taskLabel,
-        priority,
-        description,
-        reporterEmail,
-        fullReporterEmail,
-      });
-
-      // Get reporter's details from EMP table
+      // 1) Look up reporter in EMP
       const reporterResult = await sql.query`
-        SELECT EmpID, EmpLocation, Dept, EmpName, EmpEmail 
-        FROM EMP 
+        SELECT EmpID, EmpLocation, Dept, EmpName, EmpEmail
+        FROM EMP
         WHERE EmpEmail = ${fullReporterEmail}
       `;
 
-      console.log("Reporter query result:", reporterResult.recordset);
-
       if (reporterResult.recordset.length === 0) {
-        console.error("Reporter not found in EMP table");
         return res
           .status(404)
           .json({ message: "Reporter not found in EMP table" });
       }
 
-      const reporterEmpID = reporterResult.recordset[0].EmpID;
-      const empLocation = reporterResult.recordset[0].EmpLocation;
-      const reporterDept = reporterResult.recordset[0].Dept;
-      const reporterName = reporterResult.recordset[0].EmpName;
-      const reporterEmailFull = reporterResult.recordset[0].EmpEmail;
+      const {
+        EmpID: reporterEmpID,
+        EmpLocation: empLocation,
+        Dept: reporterDept,
+        EmpName: reporterName,
+        EmpEmail: reporterEmailFull,
+      } = reporterResult.recordset[0];
 
-      console.log("Reporter details:", {
-        reporterEmpID,
-        empLocation,
-        reporterDept,
-        reporterName,
-        reporterEmailFull,
-      });
-
-      // Determine Assignee_EmpID from Assignee table
-      console.log("Querying Assignee table with criteria:", {
-        empLocation,
-        department,
-        subDepartment,
-        subTask,
-        taskLabel,
-      });
-
+      // 2) Find the correct assignee for the ticket criteria
       const assigneeResult = await sql.query`
-      SELECT Assignee_EmpID FROM Assignee
-      WHERE EmpLocation = ${empLocation} 
-        AND Department = ${department} 
-        AND SubDept = ${subDepartment} 
-        AND Subtask = ${subTask} 
-        AND Task_Label = ${taskLabel} 
-    `;
-
-      console.log("Assignee query result:", assigneeResult.recordset);
+        SELECT Assignee_EmpID
+        FROM Assignee
+        WHERE EmpLocation = ${empLocation}
+          AND Department = ${department}
+          AND SubDept = ${subDepartment}
+          AND Subtask = ${subTask}
+          AND Task_Label = ${taskLabel}
+      `;
 
       if (assigneeResult.recordset.length === 0) {
-        console.error("No assignee found for the provided criteria");
         return res
           .status(404)
           .json({ message: "No assignee found for the provided criteria" });
@@ -566,49 +545,53 @@ app.post(
       // **IMPORTANT:** Here we update the INSERT query to include the new "Attachment" column.
       // (You will need to add a nullable NVARCHAR column named "Attachment" to your Tickets table.)
       await sql.query`
-          INSERT INTO Tickets (
-            Ticket_Number,
-            Creation_Date,
-            Ticket_Type,
-            Ticket_Title,
-            Ticket_Description,
-            Ticket_Priority,
-            Assignee_Dept,
-            Sub_Task,
-            Task_Label,
-            Assignee_EmpID,
-            Reporter_Location,
-            Reporter_Department,
-            Reporter_EmpID,
-            Reporter_Name,
-            Reporter_Email,
-            Attachment,
-            Expected_Completion_Date,
-            TStatus,
-            Assignee_SubDept
-          )
-          VALUES (
-            ${ticketNumber},
-            GETDATE(),
-            'Issue',
-            ${title},
-            ${description},
-            ${priority},
-            ${assigneeDept},
-            ${subTask},
-            ${taskLabel},
-            ${assigneeEmpID},
-            ${empLocation},
-            ${reporterDept},
-            ${reporterEmpID},
-            ${reporterName},
-            ${reporterEmailFull},
-            ${attachmentFile},
-            NULL,
-            'In-Progress',
-            ${assigneeSubDept}
-          )
-        `;
+      INSERT INTO Tickets (
+        Ticket_Number,
+        Creation_Date,
+        Ticket_Type,
+        Ticket_Title,
+        Ticket_Description,
+        Ticket_Priority,
+        Assignee_Dept,
+        Sub_Task,
+        Task_Label,
+        Assignee_EmpID,
+        Reporter_Location,
+        Reporter_Department,
+        Reporter_EmpID,
+        Reporter_Name,
+        Reporter_Email,
+        Incident_Reported_Date,
+        Incident_Reported_Time,
+        Attachment,
+        Expected_Completion_Date,
+        TStatus,
+        Assignee_SubDept
+      )
+      VALUES (
+        ${ticketNumber},           -- 1
+        GETDATE(),                 -- 2
+        'Issue',                   -- 3
+        ${title},                  -- 4
+        ${description},            -- 5
+        ${priority},               -- 6
+        ${assigneeDept},           -- 7  <-- use assigneeDept, not Assignee_Dept
+        ${subTask},                -- 8
+        ${taskLabel},              -- 9
+        ${assigneeEmpID},          -- 10
+        ${empLocation},            -- 11
+        ${reporterDept},           -- 12
+        ${reporterEmpID},          -- 13
+        ${reporterName},           -- 14
+        ${reporterEmailFull},      -- 15
+        ${incidentReportedDate},   -- 16
+        ${incidentReportedTime},   -- 17
+        ${req.files?.[0]?.filename || null}, -- 18
+        NULL,                      -- 19 Expected_Completion_Date
+        'In-Progress',             -- 20 TStatus
+        ${assigneeSubDept}         -- 21 <-- use assigneeSubDept, not Assignee_SubDept
+      )
+    `;
 
       console.log("Ticket inserted into Tickets table successfully.");
 
@@ -667,9 +650,10 @@ const autoCloseTickets = async () => {
   try {
     await sql.connect(dbConfig);
 
+    // 1) Find all tickets still marked Resolved
     const resolvedTicketsResult = await sql.query`
-      SELECT Ticket_Number 
-      FROM Tickets 
+      SELECT Ticket_Number
+      FROM Tickets
       WHERE TStatus = 'Resolved'
     `;
     const resolvedTickets = resolvedTicketsResult.recordset;
@@ -678,7 +662,7 @@ const autoCloseTickets = async () => {
     let closedCount = 0;
 
     for (const ticket of resolvedTickets) {
-
+      // 2) Find when it was marked Resolved
       const historyResult = await sql.query`
         SELECT TOP 1 Timestamp
         FROM History
@@ -691,22 +675,51 @@ const autoCloseTickets = async () => {
         const resolvedTime = new Date(historyResult.recordset[0].Timestamp);
         const diffDays = (now - resolvedTime) / (1000 * 60 * 60 * 24);
 
-        if (diffDays > 7) {
+        // 3) If it's been ≥ 7 days, close it
+        if (diffDays >= 5) {
+          // a) Update the ticket status
           await sql.query`
             UPDATE Tickets
             SET TStatus = 'Closed'
             WHERE Ticket_Number = ${ticket.Ticket_Number}
           `;
+
+          // b) Insert a history record for the auto‑close
+          await sql.query`
+            INSERT INTO History (
+              HTicket_Number,
+              UserID,
+              Comment,
+              Action_Type,
+              Before_State,
+              After_State,
+              Timestamp,
+              IsRead
+            )
+            VALUES (
+              ${ticket.Ticket_Number},  -- same ticket
+              'SYSTEM',                 -- SYSTEM‑initiated
+              'Auto-closed after 7 days of resolution',
+              'Status',
+              'Resolved',
+              'Closed',
+              GETDATE(),
+              0
+            )
+          `;
+
           closedCount++;
         }
       }
     }
+
     console.log(`Auto-closed ${closedCount} ticket(s).`);
   } catch (error) {
     console.error("Error in auto-closing tickets:", error);
   }
 };
-setInterval(autoCloseTickets, 1 * 60 * 1000); 
+setInterval(autoCloseTickets, 1 * 60 * 1000);
+
 
 // API endpoint to fetch user data
 app.get("/api/user", async (req, res) => {
@@ -726,6 +739,48 @@ app.get("/api/user", async (req, res) => {
     res.status(200).json(result.recordset[0]);
   } catch (error) {
     console.error("Error fetching user data:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.post("/api/acknowledge-ticket", async (req, res) => {
+  const { ticketNumber, userID, comment } = req.body;
+  try {
+    // 1) update the flag and timestamp in one go on the DB
+    await req.db.request()
+      .input("tn", sql.NVarChar(50), ticketNumber)
+      .query(`
+        UPDATE Tickets
+        SET IT_Ack_Flag = 1,
+            IT_Ack_Timestamp = GETDATE()
+        WHERE Ticket_Number = @tn;
+      `);
+
+    // 2) capture that new timestamp for the client
+    const result = await req.db.request()
+      .input("tn", sql.NVarChar(50), ticketNumber)
+      .query(`
+        SELECT IT_Ack_Timestamp AS ts
+        FROM Tickets
+        WHERE Ticket_Number = @tn;
+      `);
+
+    const ts = result.recordset[0].ts;
+    // 3) optional: insert a history record
+    await req.db.request()
+      .input("tn", sql.NVarChar(50), ticketNumber)
+      .input("uid", sql.NVarChar(255), userID)
+      .input("cmt", sql.NVarChar(255), comment || "IT Acknowledged")
+      .query(`
+        INSERT INTO History
+          (HTicket_Number, UserID, Comment, Action_Type, Before_State, After_State, Timestamp, IsRead)
+        VALUES
+          (@tn, @uid, @cmt, 'IT Acknowledged', NULL, NULL, GETDATE(), 0)
+      `);
+
+    res.json({ itAckTimestamp: ts });
+  } catch (err) {
+    console.error("❌ /api/acknowledge-ticket error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -763,6 +818,64 @@ app.get("/api/isAssignee", async (req, res) => {
     res.status(200).json({ isAssignee });
   } catch (error) {
     console.error("Error checking assignee:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Fetch a single ticket’s full details (including incident timestamps)
+app.get("/api/ticket-details", async (req, res) => {
+  const { ticketNumber } = req.query;
+  if (!ticketNumber) {
+    return res
+      .status(400)
+      .json({ message: "ticketNumber query parameter is required" });
+  }
+
+  try {
+    await sql.connect(dbConfig);
+    const result = await sql.query`
+         SELECT
+           -- all the columns you need from T *except* T.Reporter_Name & T.Reporter_Email:
+           T.Ticket_Number,
+           T.Creation_Date,
+           T.Ticket_Type,
+           T.Ticket_Title,
+           T.Ticket_Description,
+           T.Ticket_Priority,
+           T.Assignee_Dept,
+           T.Sub_Task,
+           T.Task_Label,
+           T.Assignee_EmpID,
+           T.Reporter_Location,
+           T.Reporter_Department,
+           T.Reporter_EmpID,
+           T.Incident_Reported_Date,
+           T.Incident_Reported_Time,
+           T.Attachment,
+           T.Expected_Completion_Date,
+           T.TStatus,
+           T.Assignee_SubDept,
+           T.IT_Incident_Date,
+           T.IT_Incident_Time,
+           T.IT_Ack_Flag,
+           T.IT_Ack_Timestamp,
+           -- now bring in exactly one Reporter_Name & Reporter_Email
+           E.EmpName   AS Reporter_Name,
+           E.EmpEmail  AS Reporter_Email,
+           A.EmpName   AS Assignee_Name
+         FROM Tickets T
+         LEFT JOIN EMP E ON T.Reporter_EmpID = E.EmpID
+         LEFT JOIN EMP A ON T.Assignee_EmpID = A.EmpID
+         WHERE T.Ticket_Number = ${ticketNumber}
+       `;
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    res.status(200).json(result.recordset[0]);
+  } catch (error) {
+    console.error("Error fetching ticket details:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -942,6 +1055,10 @@ const updateTicketDetails = async (ticketData) => {
     Assignee_Dept,
     Assignee_SubDept,
     Assignee_EmpID,
+    IT_Incident_Date,
+    IT_Incident_Time,
+    IT_Ack_Flag,
+    IT_Ack_Timestamp,
   } = ticketData;
 
   // Update the ticket
@@ -953,7 +1070,11 @@ const updateTicketDetails = async (ticketData) => {
       TStatus = ${TStatus || null},
       Assignee_Dept = ${Assignee_Dept || null},
       Assignee_SubDept = ${Assignee_SubDept || null},
-      Assignee_EmpID = ${Assignee_EmpID || null}
+      Assignee_EmpID = ${Assignee_EmpID || null},
+      IT_Incident_Date        = ${IT_Incident_Date || null},
+      IT_Incident_Time        = ${IT_Incident_Time || null},
+      IT_Ack_Flag             = ${IT_Ack_Flag || false},
+      IT_Ack_Timestamp        = ${IT_Ack_Timestamp || null}
     WHERE Ticket_Number = ${Ticket_Number}
   `;
 };
@@ -1192,6 +1313,120 @@ app.post("/api/update-ticket", async (req, res) => {
   }
 });
 
+// ───────────────────────────────────────────────────────────────────────────────
+// CRUD for Assignee Mappings
+// Assumes your Assignee table has a primary key column MappingID INT IDENTITY(1,1)
+
+app.get("/api/assignee-mappings", async (req, res) => {
+  try {
+    const result = await req.db.request().query(`
+      SELECT 
+        MappingID,
+        EmpLocation,
+        Department,
+        SubDept,
+        SubTask,
+        Task_Label,
+        Ticket_Type,
+        Assignee_EmpID
+      FROM Assignee
+      ORDER BY MappingID
+    `);
+    res.status(200).json(result.recordset);
+  } catch (err) {
+    console.error("Error fetching mappings:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.post("/api/assignee-mappings", async (req, res) => {
+  const {
+    EmpLocation,
+    Department,
+    SubDept,
+    SubTask,
+    Task_Label,
+    Ticket_Type,
+    Assignee_EmpID,
+  } = req.body;
+
+  try {
+    await req.db.request()
+      .input("loc", sql.NVarChar(100), EmpLocation)
+      .input("dept", sql.NVarChar(100), Department)
+      .input("sd", sql.NVarChar(100), SubDept)
+      .input("st", sql.NVarChar(100), SubTask)
+      .input("tl", sql.NVarChar(100), Task_Label)
+      .input("tt", sql.NVarChar(100), Ticket_Type)
+      .input("ae", sql.NVarChar(50), Assignee_EmpID)
+
+      .query(`
+        INSERT INTO Assignee
+          (EmpLocation, Department, SubDept, SubTask, Task_Label, Ticket_Type, Assignee_EmpID)
+        VALUES
+          (@loc, @dept, @sd, @st, @tl, @tt, @ae)
+      `);
+    res.status(201).json({ message: "Mapping created" });
+  } catch (err) {
+    console.error("Error creating mapping:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.put("/api/assignee-mappings/:id", async (req, res) => {
+  const { id } = req.params;
+  const {
+    EmpLocation,
+    Department,
+    SubDept,
+    SubTask,
+    Task_Label,
+    Ticket_Type,
+    Assignee_EmpID,
+  } = req.body;
+
+  try {
+    await req.db.request()
+      .input("id", sql.Int, id)
+      .input("loc", sql.NVarChar(100), EmpLocation)
+      .input("dept", sql.NVarChar(100), Department)
+      .input("sd", sql.NVarChar(100), SubDept)
+      .input("st", sql.NVarChar(100), SubTask)
+      .input("tl", sql.NVarChar(100), Task_Label)
+      .input("tt", sql.NVarChar(100), Ticket_Type)
+      .input("ae", sql.NVarChar(50), Assignee_EmpID)
+      .query(`
+        UPDATE Assignee
+        SET
+          EmpLocation   = @loc,
+          Department    = @dept,
+          SubDept       = @sd,
+          SubTask       = @st,
+          Task_Label    = @tl,
+          Ticket_Type   = @tt,
+          Assignee_EmpID= @ae
+        WHERE MappingID = @id
+      `);
+    res.status(200).json({ message: "Mapping updated" });
+  } catch (err) {
+    console.error("Error updating mapping:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.delete("/api/assignee-mappings/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await req.db.request()
+      .input("id", sql.Int, id)
+      .query(`DELETE FROM Assignee WHERE MappingID = @id`);
+    res.status(200).json({ message: "Mapping deleted" });
+  } catch (err) {
+    console.error("Error deleting mapping:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 /******************************************/
 /** PRODUCTION-READY RESPOND-RESOLUTION ENDPOINT **/
 /******************************************/
@@ -1209,7 +1444,7 @@ app.post("/api/tickets/respond-resolution", async (req, res) => {
       return res.status(400).json({ message: "Invalid user ID" });
     }
 
-    // 2) Fetch the current ticket
+    // 2) Fetch the current ticket status
     const ticketRes = await sql.query`
       SELECT TStatus 
       FROM Tickets 
@@ -1220,9 +1455,7 @@ app.post("/api/tickets/respond-resolution", async (req, res) => {
     }
     const currentStatus = ticketRes.recordset[0].TStatus;
 
-    // 3) Decide the new status based on 'action'
-    //    For example, only allow "accept" or "reject" if currentStatus == "Resolved"
-    //    Adjust logic if your business rules differ.
+    // 3) Determine new status
     if (currentStatus !== "Resolved") {
       return res
         .status(400)
@@ -1240,34 +1473,54 @@ app.post("/api/tickets/respond-resolution", async (req, res) => {
         .json({ message: "Invalid action. Use 'accept' or 'reject'." });
     }
 
-    // 4) Update the ticket in DB
+    // 4) Update ticket in DB
     const originalTicket = await getOriginalTicket(ticketNumber);
-
     await sql.query`
       UPDATE Tickets
       SET TStatus = ${newStatus}
       WHERE Ticket_Number = ${ticketNumber}
     `;
 
-    // 5) Insert a record into History table
-    //    We'll mark the "Before_State" as the old TStatus and "After_State" as the new TStatus.
-    const changes = [
+    // 5) Insert history record that clearly shows who closed it
+    //    SYSTEM‑closes use UserID = 'SYSTEM', user‑closes use their userID
+    const commentText =
+      action === "accept"
+        ? `Closed by user ${userID}`
+        : "Resolution rejected. Ticket reopened";
+
+    await sql.query`
+      INSERT INTO History (
+        HTicket_Number,
+        UserID,
+        Comment,
+        Action_Type,
+        Before_State,
+        After_State,
+        Timestamp,
+        IsRead
+      ) VALUES (
+        ${ticketNumber},
+        ${userID},
+        ${commentText},
+        'Status',
+        ${originalTicket.TStatus},
+        ${newStatus},
+        GETDATE(),
+        0
+      )
+    `;
+
+    // 6) Send the usual notifications
+    await sendStatusChangeEmail(ticketNumber, [
       {
         HTicket_Number: ticketNumber,
         UserID: userID,
-        Comment:
-          action === "accept"
-            ? "Resolution accepted"
-            : "Resolution rejected. Ticket reopened",
+        Comment: commentText,
         Action_Type: "Status",
         Before_State: originalTicket.TStatus,
         After_State: newStatus,
       },
-    ];
-    await insertHistoryRecords(changes);
-
-    // 6) Send notifications (uses your existing logic)
-    await sendStatusChangeEmail(ticketNumber, changes);
+    ]);
 
     return res.status(200).json({
       message:
@@ -1280,6 +1533,7 @@ app.post("/api/tickets/respond-resolution", async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // New route: Auto-close tickets that have remained in "Resolved" state for 7+ days
 app.post("/api/auto-close-tickets", async (req, res) => {
@@ -1484,12 +1738,24 @@ app.get("/api/ticket-history", async (req, res) => {
   }
 
   try {
-    const result = await sql.query`
-      SELECT HTicket_Number, UserID, Comment, Action_Type, Before_State, After_State, Timestamp 
-      FROM History
-      WHERE HTicket_Number = ${ticketNumber}
-      ORDER BY Timestamp DESC
-    `;
+    const result = await req.db.request()
+      .input("tn", sql.NVarChar(50), ticketNumber)
+      .query(`
+        SELECT
+          H.HTicket_Number,
+          H.Action_Type,
+          H.Before_State,
+          H.After_State,
+          H.Comment,
+          H.Timestamp,
+          H.UserID,
+          COALESCE(E.EmpName, H.UserID) AS CommittedBy
+        FROM History H
+        LEFT JOIN EMP E
+          ON H.UserID = E.EmpEmail
+        WHERE H.HTicket_Number = @tn
+        ORDER BY H.Timestamp DESC
+      `);
 
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -1580,7 +1846,7 @@ app.get("*", (req, res) => {
 });
 
 // HTTPS Deployment Section
-const PORT = process.env.PORT || 443; // Using port 3000 for both frontend and backend now
+const PORT = process.env.PORT || 443;
 const HOST = process.env.HOST || "0.0.0.0";
 
 const httpsOptions = {
@@ -1595,16 +1861,19 @@ const httpsOptions = {
   ),
 };
 
-const startServer = async () => {
-  try {
-    await initializeDatabase();
-    https.createServer(httpsOptions, app).listen(PORT, HOST, () => {
-      console.log(`HTTPS Server running at https://${HOST}:${PORT}`);
-    });
-  } catch (error) {
-    console.error("Error starting the server:", error);
-    process.exit(1);
-  }
-};
+(async function start() {
+  await initializeDatabase();
+  const HOST = process.env.HOST || "0.0.0.0";
+  const HTTPS_PORT = process.env.HTTPS_PORT || 11443;
+  const HTTP_PORT = process.env.HTTP_PORT || 8080;
 
-startServer();
+  // HTTPS server (unchanged)
+  https.createServer(httpsOptions, app).listen(HTTPS_PORT, HOST, () => {
+    console.log(`HTTPS Server running at https://${HOST}:${HTTPS_PORT}`);
+  });
+
+  // HTTP server (new)
+  http.createServer(app).listen(HTTP_PORT, HOST, () => {
+    console.log(` HTTP Server running at http://${HOST}:${HTTP_PORT}`);
+  });
+})();
