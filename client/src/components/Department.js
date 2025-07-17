@@ -653,6 +653,7 @@ const DepartmentDashboard = () => {
                 <TableHeader>
                   {viewMode === "assignedToDept" ? "Assigned By" : "Created By"}
                 </TableHeader>
+                <TableHeader>Assignee</TableHeader>
                 {/* Deadline with sort & filter */}
                 <TableHeader
                   onClick={() => handleSort("Expected_Completion_Date")}
@@ -704,6 +705,7 @@ const DepartmentDashboard = () => {
                       ? formatReporterName(t.Reporter_Name)
                       : t.Assignee_Name}
                   </TableData>
+                  <TableData>{t.Assignee_Name}</TableData>
                   {/* 6. Deadline */}
                   <TableData>
                     {t.TStatus === "Closed" || t.TStatus === "Resolved"

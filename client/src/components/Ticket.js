@@ -167,7 +167,15 @@ const CreateTicketPage = () => {
   const [incidentDate, setIncidentDate] = useState("");
   const [incidentTime, setIncidentTime] = useState("");
 
-  const [ticketPriority, setTicketPriority] = useState("");
+  const [ticketUrgency, setTicketUrgency] = useState(""); // renamed
+  const [urgencyDefs] = useState({
+    High: "Major system outage; many users impacted",
+    Medium: "Partial degradation; some users impacted",
+    Low: "Minor or no impact; informational",
+  });
+  const [locations, setLocations] = useState([]); // new
+  const [selectedLocation, setSelectedLocation] = useState("");
+
   const [ticketDescription, setTicketDescription] = useState("");
 
   // new state for "on behalf"
@@ -285,6 +293,15 @@ const CreateTicketPage = () => {
     setSelectedTaskLabel("");
   }, [selectedSubTask, selectedSubDepartment, selectedDepartment]);
 
+  useEffect(() => {
+    axios
+      .get(`${API_BASE_URL}/api/locations`, {
+        params: { department: selectedDepartment },
+      })
+      .then((res) => setLocations(res.data))
+      .catch((err) => console.error("Error fetching locations:", err));
+  }, [selectedDepartment]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -301,7 +318,7 @@ const CreateTicketPage = () => {
     formData.append("subDepartment", selectedSubDepartment);
     formData.append("subTask", selectedSubTask);
     formData.append("taskLabel", selectedTaskLabel);
-    formData.append("priority", ticketPriority);
+    formData.append("priority", ticketUrgency);
     formData.append("description", ticketDescription);
     formData.append("reporterEmail", reporterEmail);
     formData.append("incidentReportedDate", incidentDate);
@@ -332,7 +349,7 @@ const CreateTicketPage = () => {
 
         setSelectedSubTask("");
         setSelectedTaskLabel("");
-        setTicketPriority("");
+        setTicketUrgency("");
         setTicketDescription("");
         setAttachments(null);
 
@@ -358,6 +375,18 @@ const CreateTicketPage = () => {
         <Subtitle>
           All fields are mandatory and must be filled before ticket submission
         </Subtitle>
+        {/* AUTO-CLOSE NOTE */}
+        <p
+          style={{
+            textAlign: "center",
+            fontStyle: "italic",
+            color: "#a00",
+            marginTop: "8px",
+          }}
+        >
+          Note: Tickets auto‑close 5 days after resolution and cannot be
+          reopened or manually closed thereafter.
+        </p>
         <Form onSubmit={handleSubmit}>
           {isAssigneeUser && (
             <>
@@ -365,7 +394,6 @@ const CreateTicketPage = () => {
               <TitleInput
                 type="text"
                 placeholder="Enter username (without @…)"
-                required
                 value={createdForEmail}
                 onChange={(e) => setCreatedForEmail(e.target.value)}
               />
@@ -417,18 +445,44 @@ const CreateTicketPage = () => {
               </Select>
             </div>
             <div style={{ flex: 1 }}>
-              <FieldHeader>Priority:</FieldHeader>
+              <FieldHeader>Urgency:</FieldHeader>
               <Select
                 required
-                value={ticketPriority}
-                onChange={(e) => setTicketPriority(e.target.value)}
+                value={ticketUrgency}
+                onChange={(e) => setTicketUrgency(e.target.value)}
               >
-                <option value="">Select priority</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
+                <option value="">Select urgency</option>
+                {["High", "Medium", "Low"].map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </Select>
+              {ticketUrgency && (
+                <small style={{ color: "#555" }}>
+                  {urgencyDefs[ticketUrgency]}
+                </small>
+              )}
+            </div>
+            </InputRow>
+
+            <InputRow>
+            <div style={{ flex: 1 }}>
+              <FieldHeader>Location:</FieldHeader>
+              <Select
+                required
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+              >
+                <option value="">Select location</option>
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
               </Select>
             </div>
+
             <div style={{ flex: 1 }}>
               <FieldHeader>Incident Date:</FieldHeader>
               <Input

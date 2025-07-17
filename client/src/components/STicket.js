@@ -303,6 +303,10 @@ const STicket = () => {
   const [isHistoryVisible, setIsHistoryVisible] = useState(true);
   const [isHod, setIsHod] = useState(false);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // ── FIGURE OUT HOD STATUS ─────────────────────────────────────────────
   useEffect(() => {
     // 1) fetch this user’s EmpID
@@ -497,7 +501,7 @@ const STicket = () => {
         Comment: remarks,
       };
       await axios.post(`${API_BASE_URL}/api/update-ticket`, updatedTicketData);
-      navigate("/profile");
+      navigate(-1);
     } catch (err) {
       console.error("Error updating ticket:", err.response || err);
     }
@@ -509,7 +513,7 @@ const STicket = () => {
         <Sidebar activeTab="Ticket Details" />
         <Content>
           <TicketDetails isHistoryVisible={isHistoryVisible}>
-            <BackButton onClick={() => navigate("/profile")}>Back</BackButton>
+            <BackButton onClick={() => navigate(-1)}>Back</BackButton>
             <Title>Ticket Details - {ticket.Ticket_Number}</Title>
 
             <DetailRow>
@@ -595,7 +599,7 @@ const STicket = () => {
                         }
                       );
                       alert("Resolution accepted. Ticket will be closed.");
-                      navigate("/profile");
+                      navigate(-1);
                     } catch (error) {
                       console.error("Error accepting resolution:", error);
                     }
@@ -626,7 +630,7 @@ const STicket = () => {
                       alert(
                         "Ticket re-opened. Ticket will be marked as In-Progress."
                       );
-                      navigate("/profile");
+                      navigate(-1);
                     } catch (error) {
                       console.error("Error re-opening ticket:", error);
                     }
@@ -634,6 +638,18 @@ const STicket = () => {
                 >
                   Reopen Ticket
                 </button>
+
+                <p
+                  style={{
+                    color: "#a00",
+                    fontStyle: "italic",
+                    marginTop: "10px",
+                  }}
+                >
+                  Note: Tickets are automatically closed 5 days after
+                  resolution, and cannot be reopened or manually closed
+                  thereafter.
+                </p>
               </div>
             )}
 

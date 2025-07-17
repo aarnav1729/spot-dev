@@ -159,7 +159,7 @@ const ForgotPassword = () => {
       // Step 1: Send OTP
       try {
         const response = await axios.post(
-          `${API_BASE_URL}/api/send-otp`,
+          `${API_BASE_URL}/api/send-otp-reset`,
           { email: emailUser }
         );
         console.log(response.data);

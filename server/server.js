@@ -216,6 +216,70 @@ app.post("/api/send-otp", async (req, res) => {
   }
 });
 
+// send‐otp for *forgot password* flow:
+app.post("/api/send-otp-reset", async (req, res) => {
+  const { email } = req.body;
+  const fullEmail = `${email}@premierenergies.com`;
+
+  try {
+    await sql.connect(dbConfig);
+
+    // 1) Make sure an account *does* already exist (i.e. LPassword is set)
+    const loginCheck = await sql.query`
+      SELECT LPassword 
+      FROM Login 
+      WHERE Username = ${fullEmail}
+    `;
+    if (
+      loginCheck.recordset.length === 0 ||
+      loginCheck.recordset[0].LPassword === null
+    ) {
+      return res.status(404).json({
+        message: "No account found with that email. Please register first.",
+      });
+    }
+
+    // 2) Confirm they’re in the EMP table and ActiveFlag = 1
+    const empResult = await sql.query`
+      SELECT EmpID 
+      FROM EMP 
+      WHERE EmpEmail = ${fullEmail} 
+        AND ActiveFlag = 1
+    `;
+    if (empResult.recordset.length === 0) {
+      return res.status(404).json({
+        message:
+          "We do not have a @premierenergies email address registered for you. If you have a company email ID, please contact HR.",
+      });
+    }
+    const empID = empResult.recordset[0].EmpID;
+
+    // 3) Generate & store a fresh OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiryTime = new Date(Date.now() + 5 * 60000);
+    await sql.query`
+      MERGE Login AS target
+      USING (SELECT ${fullEmail} AS Username) AS source
+      ON (target.Username = source.Username)
+      WHEN MATCHED THEN 
+        UPDATE SET OTP = ${otp}, OTP_Expiry = ${expiryTime}
+      WHEN NOT MATCHED THEN
+        INSERT (Username, OTP, OTP_Expiry, LEmpID)
+        VALUES (${fullEmail}, ${otp}, ${expiryTime}, ${empID});
+    `;
+
+    // 4) Email it
+    const subject = "Your Password Reset OTP";
+    const content = `<p>Your OTP code is: <strong>${otp}</strong></p>`;
+    await sendEmail(fullEmail, subject, content);
+
+    res.status(200).json({ message: "OTP sent successfully" });
+  } catch (error) {
+    console.error("Error in /api/send-otp-reset:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // API endpoint to verify OTP
 app.post("/api/verify-otp", async (req, res) => {
   const { email, otp } = req.body;
@@ -1258,6 +1322,25 @@ async function sendStatusChangeEmail(ticketNumber, changes) {
     await sendEmail(ticketDetails.AssigneeEmail, subject, content);
   }
 }
+
+// near the other GET endpoints, e.g. after /api/subtasks
+app.get("/api/locations", async (req, res) => {
+  const { department } = req.query;
+  try {
+    // get all distinct locations for that department
+    const result = await sql.query`
+      SELECT DISTINCT EmpLocation 
+      FROM EMP 
+      WHERE Dept = ${department}
+    `;
+    const locations = result.recordset.map(r => r.EmpLocation).filter(Boolean);
+    res.status(200).json(locations);
+  } catch (err) {
+    console.error("Error fetching locations:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 // Main endpoint handler
 app.post("/api/update-ticket", async (req, res) => {

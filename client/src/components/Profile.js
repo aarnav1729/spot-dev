@@ -164,8 +164,8 @@ const StatusCardContainer = styled.div`
 
 // StatusCard: decrease dimensions on mobile
 const StatusCard = styled.div`
-  background-color: #ffffff;
-  color: #000;
+  background-color: ${(props) => (props.active ? "#0f6ab0" : "#ffffff")};
+  color: ${(props) => (props.active ? "#ffffff" : "#000")};
   width: 130px;
   border-right: 1px solid #666;
   padding: 20px;
@@ -400,6 +400,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [userData, setUserData] = useState({});
   const [tickets, setTickets] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("total");
   const [filteredTickets, setFilteredTickets] = useState([]); // State for filtered tickets
   const [searchTerm, setSearchTerm] = useState(""); // State for search input
   const [statusCounts, setStatusCounts] = useState({});
@@ -665,6 +666,32 @@ const Dashboard = () => {
   const filteredAndSorted = useMemo(() => {
     let data = tickets;
 
+    if (statusFilter && statusFilter !== "total") {
+      data = data.filter((t) => {
+        switch (statusFilter) {
+          case "unassigned":
+            return !t.Expected_Completion_Date;
+          case "inProgress":
+            return t.TStatus === "In-Progress";
+          case "resolved":
+            return t.TStatus === "Resolved";
+          case "closed":
+            return t.TStatus === "Closed";
+          case "overdue": {
+            if (!t.Expected_Completion_Date) return false;
+            const today = new Date(); today.setHours(0,0,0,0);
+            const exp   = new Date(t.Expected_Completion_Date);
+            exp.setHours(0,0,0,0);
+            return exp < today
+              && t.TStatus !== "Resolved"
+              && t.TStatus !== "Closed";
+          }
+          default:
+            return true;
+        }
+      });
+    }
+
     // text search
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -708,7 +735,8 @@ const Dashboard = () => {
     }
 
     return data;
-  }, [tickets, searchTerm, creationDateFilter, deadlineDateFilter, sortConfig]);
+  }, [tickets, statusFilter, searchTerm, creationDateFilter, deadlineDateFilter, sortConfig]);
+
 
   const handleModalSubmit = async () => {
     try {
@@ -764,8 +792,12 @@ const Dashboard = () => {
 
           <StatusCardGroup>
             <StatusCardContainer>
-              {statusDataState.map((status, index) => (
-                <StatusCard key={index} color={status.color}>
+              {statusDataState.map((status) => (
+                <StatusCard
+                  key={status.key}
+                  active={statusFilter === status.key}
+                  onClick={() => setStatusFilter(status.key)}
+                >
                   <StatusTitle>{status.title}</StatusTitle>
                   <div
                     style={{
@@ -774,7 +806,7 @@ const Dashboard = () => {
                       gap: "10px",
                     }}
                   >
-                    <StatusCount>{status.count || 0}</StatusCount>+{" "}
+                    <StatusCount>{status.count || 0}</StatusCount>+
                     <div
                       style={{
                         fontSize: "14px",
