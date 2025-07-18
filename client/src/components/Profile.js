@@ -679,12 +679,13 @@ const Dashboard = () => {
             return t.TStatus === "Closed";
           case "overdue": {
             if (!t.Expected_Completion_Date) return false;
-            const today = new Date(); today.setHours(0,0,0,0);
-            const exp   = new Date(t.Expected_Completion_Date);
-            exp.setHours(0,0,0,0);
-            return exp < today
-              && t.TStatus !== "Resolved"
-              && t.TStatus !== "Closed";
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const exp = new Date(t.Expected_Completion_Date);
+            exp.setHours(0, 0, 0, 0);
+            return (
+              exp < today && t.TStatus !== "Resolved" && t.TStatus !== "Closed"
+            );
           }
           default:
             return true;
@@ -720,23 +721,41 @@ const Dashboard = () => {
       );
     }
 
-    // sort
     if (sortConfig.key) {
       data = [...data].sort((a, b) => {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
-        // missing dates go last
-        if (!aVal) return 1;
-        if (!bVal) return -1;
-        aVal = new Date(aVal).getTime();
-        bVal = new Date(bVal).getTime();
-        return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
+
+        // normalize null/undefined
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
+        // if both look like dates, compare as dates
+        const maybeDateA = Date.parse(aVal);
+        const maybeDateB = Date.parse(bVal);
+        if (!isNaN(maybeDateA) && !isNaN(maybeDateB)) {
+          return sortConfig.direction === "asc"
+            ? maybeDateA - maybeDateB
+            : maybeDateB - maybeDateA;
+        }
+
+        // else compare as strings
+        aVal = aVal.toString().toLowerCase();
+        bVal = bVal.toString().toLowerCase();
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
       });
     }
-
     return data;
-  }, [tickets, statusFilter, searchTerm, creationDateFilter, deadlineDateFilter, sortConfig]);
-
+  }, [
+    tickets,
+    statusFilter,
+    searchTerm,
+    creationDateFilter,
+    deadlineDateFilter,
+    sortConfig,
+  ]);
 
   const handleModalSubmit = async () => {
     try {
@@ -860,8 +879,13 @@ const Dashboard = () => {
           <Table>
             <thead>
               <tr>
-                <TableHeader>
-                  <tno>Ticket Number</tno>
+                <TableHeader onClick={() => handleSort("Ticket_Number")}>
+                  Ticket#
+                  {sortConfig.key === "Ticket_Number"
+                    ? sortConfig.direction === "asc"
+                      ? " ↑"
+                      : " ↓"
+                    : ""}
                 </TableHeader>
                 {/* Creation Date */}
                 <TableHeader onClick={() => handleSort("Creation_Date")}>
@@ -882,11 +906,37 @@ const Dashboard = () => {
                 </TableHeader>
 
                 <TableHeader>Ticket Title</TableHeader>
-                <TableHeader>Priority</TableHeader>
+                <TableHeader onClick={() => handleSort("Ticket_Priority")}>
+                  Priority
+                  {sortConfig.key === "Ticket_Priority"
+                    ? sortConfig.direction === "asc"
+                      ? " ↑"
+                      : " ↓"
+                    : ""}
+                </TableHeader>
+                <TableHeader
+                  onClick={() => handleSort("Incident_Reported_Date")}
+                >
+                  Incident Date
+                  {sortConfig.key === "Incident_Reported_Date"
+                    ? sortConfig.direction === "asc"
+                      ? " ↑"
+                      : " ↓"
+                    : ""}
+                </TableHeader>
+
+                <TableHeader
+                  onClick={() => handleSort("Incident_Reported_Time")}
+                >
+                  Incident Time
+                  {sortConfig.key === "Incident_Reported_Time"
+                    ? sortConfig.direction === "asc"
+                      ? " ↑"
+                      : " ↓"
+                    : ""}
+                </TableHeader>
                 <TableHeader>
-                  {viewMode === "assignedToMe"
-                    ? "Assigned By"
-                    : "Created By Me"}
+                  {viewMode === "assignedToMe" ? "Assigned By" : "Assigned To"}
                 </TableHeader>
                 {/* Deadline */}
                 <TableHeader
@@ -936,6 +986,18 @@ const Dashboard = () => {
                   </TableData>
                   <TableData>{ticket.Ticket_Title}</TableData>
                   <TableData>{ticket.Ticket_Priority}</TableData>
+                  <TableData>
+                    {ticket.Incident_Reported_Date
+                      ? new Date(ticket.Incident_Reported_Date)
+                          .toISOString()
+                          .split("T")[0]
+                      : "N/A"}
+                  </TableData>
+                  <TableData>
+                    {ticket.Incident_Reported_Time
+                      ? ticket.Incident_Reported_Time.slice(11, 16)
+                      : "N/A"}
+                  </TableData>
                   <TableData>
                     {viewMode === "assignedToMe"
                       ? ticket.Reporter_Name

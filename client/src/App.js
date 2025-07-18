@@ -16,6 +16,7 @@ import Notifs from './components/Notifs';
 import Dashboard from './components/Dashboard';
 import STicket from './components/STicket';
 import AssigneeMappings from './components/AssigneeMappings';
+import Companies from './components/Companies';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/department" element={<Department />} />
         <Route path="/assignee-mappings" element={<AssigneeMappings />} />
+        <Route path="/companies" element={<Companies />} />
         <Route path="/ticket" element={<Ticket />} />
         <Route path="/ticket/:ticketNumber" element={<STicket />} />
         <Route path="/faqs" element={<FAQs />} />

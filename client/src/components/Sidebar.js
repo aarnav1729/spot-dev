@@ -195,6 +195,15 @@ const Sidebar = ({ activeTab }) => {
                 Assignee Mappings
               </SidebarItemText>
             </SidebarItem>
+            {/* NEW: Companies page link, HOD only */}
+            <SidebarItem
+              active={activeTab === "Companies"}
+              collapsed={collapsed}
+              onClick={() => navigate("/companies")}
+            >
+              <FaBuilding />
+              <SidebarItemText collapsed={collapsed}>Companies</SidebarItemText>
+            </SidebarItem>
           </>
         )}
 
@@ -219,12 +228,12 @@ const Sidebar = ({ activeTab }) => {
         </SidebarItem>
 
         <SidebarItem
-          active={activeTab === "Team Structure"}
+          active={activeTab === "IT Org Chart"}
           collapsed={collapsed}
           onClick={() => handleNavigation("/team")}
         >
           <FaUsers />
-          <SidebarItemText collapsed={collapsed}>Team Structure</SidebarItemText>
+          <SidebarItemText collapsed={collapsed}>IT Org Chart</SidebarItemText>
         </SidebarItem>
 
         {/* Removed Priority Tasks SidebarItem 

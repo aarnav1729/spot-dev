@@ -271,6 +271,36 @@ const HistoryToggleButton = styled.button`
   }
 `;
 
+// dispute modal
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+`;
+const ModalContent = styled.div`
+  background: #fff;
+  padding: 24px;
+  border-radius: 8px;
+  width: 320px;
+`;
+const ModalLabel = styled.label`
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+`;
+const ModalActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  button {
+    margin-left: 8px;
+  }
+`;
+
 /* Helper function to fix reporter name duplication.
    If the name is exactly repeated twice (e.g. "Aarnav SinghAarnav Singh"),
    it returns only the first half. Otherwise, it returns the original name. */
@@ -302,6 +332,20 @@ const STicket = () => {
   const [history, setHistory] = useState([]);
   const [isHistoryVisible, setIsHistoryVisible] = useState(true);
   const [isHod, setIsHod] = useState(false);
+
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+
+  const handleCancelDispute = () => {
+    // reset to original if you like:
+    setItIncidentDate(ticket.IT_Incident_Date?.slice(0, 10) || "");
+    setItIncidentTime(ticket.IT_Incident_Time?.slice(0, 5) || "");
+    setShowDisputeModal(false);
+  };
+
+  const handleSaveDispute = () => {
+    // you could add validation here
+    setShowDisputeModal(false);
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -519,30 +563,68 @@ const STicket = () => {
             <DetailRow>
               <strong>Creation Date:</strong>{" "}
               {new Date(ticket.Creation_Date).toISOString().split("T")[0]}
-            </DetailRow>
-
-            <DetailRow>
+            
               <strong>Ticket Title:</strong> {ticket.Ticket_Title}
-            </DetailRow>
-            <DetailRow>
+            
               <strong>Description:</strong> {ticket.Ticket_Description}
             </DetailRow>
+            {/* grouped static fields */}
             <DetailRow>
-              <strong>Reporter Name:</strong> {stripDup(ticket.Reporter_Name)}
+              <strong>Reporter Name:</strong>
+              <span>{stripDup(ticket.Reporter_Name)}</span>
+              <strong>Reporter Email:</strong>
+              <span>{stripDup(ticket.Reporter_Email)}</span>
             </DetailRow>
             <DetailRow>
-              <strong>Reporter Email:</strong> {stripDup(ticket.Reporter_Email)}
+              <strong>Department:</strong>
+              <span>{ticket.Assignee_Dept}</span>
+              <strong>Sub‑Dept:</strong>
+              <span>{ticket.Assignee_SubDept}</span>
             </DetailRow>
+            <DetailRow>
+              <strong>Incident Date:</strong>
+              <span>{formatISODate(ticket.Incident_Reported_Date)}</span>
+              <strong>Incident Time:</strong>
+              <span>{formatTimeIST(ticket.Incident_Reported_Time)}</span>
+              <button onClick={() => setShowDisputeModal(true)}>
+                Dispute?
+              </button>
+            </DetailRow>
+            {/* once they’ve saved a dispute, show it here */}
+            {itIncidentDate && itIncidentTime && !showDisputeModal && (
+              <DetailRow>
+                <strong>IT Incident Date:</strong>
+                <span>{itIncidentDate}</span>
+                <strong>IT Incident Time:</strong>
+                <span>{itIncidentTime}</span>
+              </DetailRow>
+            )}
 
-            {/* new incident‑reported fields */}
-            <DetailRow>
-              <strong>Incident Reported Date:</strong>{" "}
-              {formatISODate(ticket.Incident_Reported_Date)}
-            </DetailRow>
-            <DetailRow>
-              <strong>Incident Reported Time:</strong>{" "}
-              {formatTimeIST(ticket.Incident_Reported_Time)}
-            </DetailRow>
+            {/* Dispute Modal */}
+            {showDisputeModal && (
+              <ModalOverlay>
+                <ModalContent>
+                  <ModalLabel>IT Incident Date</ModalLabel>
+                  <Input
+                    type="date"
+                    value={itIncidentDate}
+                    onChange={(e) => setItIncidentDate(e.target.value)}
+                  />
+                  <ModalLabel>IT Incident Time</ModalLabel>
+                  <Input
+                    type="time"
+                    value={itIncidentTime}
+                    onChange={(e) => setItIncidentTime(e.target.value)}
+                  />
+                  <ModalActions>
+                    <button onClick={handleCancelDispute}>Cancel</button>
+                    <SubmitButton onClick={handleSaveDispute}>
+                      Save
+                    </SubmitButton>
+                  </ModalActions>
+                </ModalContent>
+              </ModalOverlay>
+            )}
 
             {ticket.Attachment && (
               <DetailRow>
@@ -560,16 +642,21 @@ const STicket = () => {
             {/* Editable fields: Only assignee can change most fields */}
             <FormRow>
               <Label>Status:</Label>
-              <Select
-                value={updatedStatus}
-                onChange={(e) => setUpdatedStatus(e.target.value)}
-                disabled={!isAssignee}
-              >
-                <option value="">Select Status</option>
-                <option value="In-Progress">In-Progress</option>
-                <option value="Overdue">Overdue</option>
-                <option value="Resolved">Resolved</option>
-              </Select>
+              <div>
+                {["In-Progress", "Overdue", "Resolved"].map((opt) => (
+                  <label key={opt} style={{ marginRight: 16 }}>
+                    <input
+                      type="radio"
+                      name="status"
+                      value={opt}
+                      checked={updatedStatus === opt}
+                      disabled={!isAssignee}
+                      onChange={() => setUpdatedStatus(opt)}
+                    />{" "}
+                    {opt}
+                  </label>
+                ))}
+              </div>
             </FormRow>
 
             {isReporter && updatedStatus === "Resolved" && (
@@ -738,22 +825,6 @@ const STicket = () => {
             {(isAssignee || isHod) && (
               <>
                 <FormRow>
-                  <Label>IT Incident Date:</Label>
-                  <Input
-                    type="date"
-                    value={itIncidentDate}
-                    onChange={(e) => setItIncidentDate(e.target.value)}
-                  />
-                </FormRow>
-                <FormRow>
-                  <Label>IT Incident Time:</Label>
-                  <Input
-                    type="time"
-                    value={itIncidentTime}
-                    onChange={(e) => setItIncidentTime(e.target.value)}
-                  />
-                </FormRow>
-                <FormRow>
                   <Label>IT Acknowledged:</Label>
                   <button
                     type="button"
@@ -771,7 +842,7 @@ const STicket = () => {
                         setItAckFlag(true);
                         setItAckTimestamp(data.itAckTimestamp);
                       } catch (err) {
-                        console.error("Error acknowledging ticket:", err);
+                        console.error(err);
                         alert("Failed to acknowledge. Please try again.");
                       }
                     }}
@@ -779,10 +850,14 @@ const STicket = () => {
                     {itAckFlag ? "Acknowledged" : "Acknowledge"}
                   </button>
                 </FormRow>
+                {/* show timestamp if present */}
                 {itAckTimestamp && (
                   <DetailRow>
                     <strong>IT Ack Time:</strong>
-                    {itAckTimestamp.slice(0, 10)} {itAckTimestamp.slice(11, 16)}
+                    <span>
+                      {itAckTimestamp.slice(0, 10)}{" "}
+                      {itAckTimestamp.slice(11, 16)}
+                    </span>
                   </DetailRow>
                 )}
               </>

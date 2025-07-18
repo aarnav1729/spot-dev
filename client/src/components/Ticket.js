@@ -3,6 +3,7 @@ import styled from "styled-components";
 import Sidebar from "./Sidebar";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import debounce from "lodash.debounce";
 
 const API_BASE_URL = window.location.origin;
 
@@ -144,11 +145,42 @@ const SubmitButton = styled.button`
   margin-top: 20px;
 `;
 
+// reuse for error messages
 const Message = styled.p`
-  color: ${({ success }) => (success ? "green" : "red")};
+  color: red;
   text-align: center;
   font-size: 16px;
   margin-top: 20px;
+`;
+
+// new modal overlay
+const ConfirmationOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const ConfirmationModal = styled.div`
+  background: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  p {
+    margin-bottom: 20px;
+    font-size: 16px;
+    color: #333;
+  }
+
+  button {
+    margin-top: 0;
+  }
 `;
 
 const CreateTicketPage = () => {
@@ -169,9 +201,9 @@ const CreateTicketPage = () => {
 
   const [ticketUrgency, setTicketUrgency] = useState(""); // renamed
   const [urgencyDefs] = useState({
-    High: "Major system outage; many users impacted",
-    Medium: "Partial degradation; some users impacted",
-    Low: "Minor or no impact; informational",
+    High: "Affects core business operations, a critical service is completely down, or a large number of users are unable to perform their essential functions.",
+    Medium: "A critical component or service is severely degraded, affecting a significant number of users or a key business function.",
+    Low: "Affects an individual user or a smaller group of users, or a non-critical function of a system is impaired. Allows operations to continue, but with some inconvenience or reduced efficiency.",
   });
   const [locations, setLocations] = useState([]); // new
   const [selectedLocation, setSelectedLocation] = useState("");
@@ -186,6 +218,9 @@ const CreateTicketPage = () => {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [reporterEmail, setReporterEmail] = useState("");
+
+  const [userSuggestions, setUserSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [attachments, setAttachments] = useState(null);
   const navigate = useNavigate();
@@ -215,6 +250,15 @@ const CreateTicketPage = () => {
       })
       .catch((err) => console.error("Auth check failed:", err));
   }, [navigate]);
+
+  // fetch matching usernames, debounced
+  const fetchUserSuggestions = debounce((q) => {
+    if (!q) return setUserSuggestions([]);
+    axios
+      .get(`${API_BASE_URL}/api/search-employees`, { params: { q } })
+      .then((res) => setUserSuggestions(res.data))
+      .catch(() => setUserSuggestions([]));
+  }, 300);
 
   // Fetch departments on component mount
   useEffect(() => {
@@ -391,12 +435,53 @@ const CreateTicketPage = () => {
           {isAssigneeUser && (
             <>
               <FieldHeader>Created For (username):</FieldHeader>
-              <TitleInput
-                type="text"
-                placeholder="Enter username (without @…)"
-                value={createdForEmail}
-                onChange={(e) => setCreatedForEmail(e.target.value)}
-              />
+              <div style={{ position: "relative", width: "400px" }}>
+                <TitleInput
+                  type="text"
+                  placeholder="Enter username (without @…)"
+                  value={createdForEmail}
+                  onChange={(e) => {
+                    setCreatedForEmail(e.target.value);
+                    fetchUserSuggestions(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onBlur={() =>
+                    setTimeout(() => setShowSuggestions(false), 200)
+                  }
+                />
+                {showSuggestions && userSuggestions.length > 0 && (
+                  <ul
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      background: "#fff",
+                      border: "1px solid #ccc",
+                      borderRadius: 4,
+                      maxHeight: 200,
+                      overflowY: "auto",
+                      zIndex: 10,
+                      margin: 0,
+                      padding: 0,
+                      listStyle: "none",
+                    }}
+                  >
+                    {userSuggestions.map((u) => (
+                      <li
+                        key={u}
+                        style={{ padding: "8px", cursor: "pointer" }}
+                        onMouseDown={() => {
+                          setCreatedForEmail(u);
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        {u}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </>
           )}
 
@@ -464,9 +549,9 @@ const CreateTicketPage = () => {
                 </small>
               )}
             </div>
-            </InputRow>
+          </InputRow>
 
-            <InputRow>
+          <InputRow>
             <div style={{ flex: 1 }}>
               <FieldHeader>Location:</FieldHeader>
               <Select
@@ -523,8 +608,16 @@ const CreateTicketPage = () => {
 
           <SubmitButton type="submit">Create Ticket</SubmitButton>
         </Form>
-        {successMessage && <Message success>{successMessage}</Message>}
         {errorMessage && <Message>{errorMessage}</Message>}
+
+        {successMessage && (
+          <ConfirmationOverlay>
+            <ConfirmationModal>
+              <p>{successMessage}</p>
+              <SubmitButton onClick={() => navigate(-1)}>Okay</SubmitButton>
+            </ConfirmationModal>
+          </ConfirmationOverlay>
+        )}
       </Content>
     </Container>
   );

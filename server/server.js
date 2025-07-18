@@ -198,9 +198,15 @@ app.post("/api/send-otp", async (req, res) => {
             VALUES (${fullEmail}, ${otp}, ${expiryTime}, ${empID});
       `;
 
-      // Send OTP via email
-      const subject = "Your OTP Code";
-      const content = `<p>Your OTP code is: <strong>${otp}</strong></p>`;
+      // Send OTP via email with a more formal template
+      const subject =
+        "Welcome to Premier Energies Ticketing Tool – Your OTP Code";
+      const content = `
+              <p>Welcome to the Premier Energies Ticketing Tool!</p>
+              <p>Thank you for registering. Your One‑Time Password (OTP) is: <strong>${otp}</strong></p>
+              <p>This OTP will expire in 5 minutes.</p>
+              <p>Thanks &amp; Regards,<br/>Team SPOT</p>
+            `;
       await sendEmail(fullEmail, subject, content);
 
       res.status(200).json({ message: "OTP sent successfully" });
@@ -268,9 +274,14 @@ app.post("/api/send-otp-reset", async (req, res) => {
         VALUES (${fullEmail}, ${otp}, ${expiryTime}, ${empID});
     `;
 
-    // 4) Email it
-    const subject = "Your Password Reset OTP";
-    const content = `<p>Your OTP code is: <strong>${otp}</strong></p>`;
+    // 4) Email it with the same formal template
+    const subject = "Premier Energies Ticketing Tool – Password Reset OTP";
+    const content = `
+          <p>Welcome back to the Premier Energies Ticketing Tool!</p>
+          <p>Your One‑Time Password (OTP) for resetting your password is: <strong>${otp}</strong></p>
+          <p>This OTP will expire in 5 minutes.</p>
+          <p>Thanks &amp; Regards,<br/>Team SPOT</p>
+        `;
     await sendEmail(fullEmail, subject, content);
 
     res.status(200).json({ message: "OTP sent successfully" });
@@ -660,9 +671,38 @@ app.post(
       console.log("Ticket inserted into Tickets table successfully.");
 
       // Send confirmation email to reporter
-      const reporterSubject = "Ticket Created Successfully";
-      const reporterContent = `<p>Your ticket has been created successfully with Ticket Number: ${ticketNumber}</p>`;
-      await sendEmail(fullReporterEmail, reporterSubject, reporterContent);
+      const reporterSubject =
+        "Premier Energies Ticketing Tool – Ticket Created Successfully";
+      const reporterContent = `
+        <p>Your ticket has been created successfully with Ticket Number: <strong>${ticketNumber}</strong>.</p>
+        <p><strong>Ticket Details:</strong></p>
+        <ul>
+          <li><strong>Title:</strong> ${title}</li>
+          <li><strong>Description:</strong> ${description}</li>
+          <li><strong>Priority:</strong> ${priority}</li>
+          <li><strong>Department:</strong> ${department}</li>
+          <li><strong>Sub‑Department:</strong> ${subDepartment}</li>
+          <li><strong>Sub Task:</strong> ${subTask}</li>
+          <li><strong>Task Label:</strong> ${taskLabel}</li>
+          <li><strong>Incident Reported Date:</strong> ${incidentReportedDate}</li>
+          <li><strong>Incident Reported Time:</strong> ${incidentReportedTime}</li>
+          ${
+            req.files && req.files.length > 0
+              ? `<li><strong>Attachments:</strong> ${req.files
+                  .map((f) => f.originalname)
+                  .join(", ")}</li>`
+              : ""
+          }
+        </ul>
+        <p>Thanks &amp; Regards,<br/>Team SPOT</p>
+      `;
+      // pass along any uploaded files so they're included as attachments
+      await sendEmail(
+        fullReporterEmail,
+        reporterSubject,
+        reporterContent,
+        req.files
+      );
       console.log(`Confirmation email sent to reporter: ${fullReporterEmail}`);
 
       // Get Assignee's email from EMP table
@@ -784,7 +824,6 @@ const autoCloseTickets = async () => {
 };
 setInterval(autoCloseTickets, 1 * 60 * 1000);
 
-
 // API endpoint to fetch user data
 app.get("/api/user", async (req, res) => {
   const { email } = req.query;
@@ -811,9 +850,7 @@ app.post("/api/acknowledge-ticket", async (req, res) => {
   const { ticketNumber, userID, comment } = req.body;
   try {
     // 1) update the flag and timestamp in one go on the DB
-    await req.db.request()
-      .input("tn", sql.NVarChar(50), ticketNumber)
-      .query(`
+    await req.db.request().input("tn", sql.NVarChar(50), ticketNumber).query(`
         UPDATE Tickets
         SET IT_Ack_Flag = 1,
             IT_Ack_Timestamp = GETDATE()
@@ -821,9 +858,9 @@ app.post("/api/acknowledge-ticket", async (req, res) => {
       `);
 
     // 2) capture that new timestamp for the client
-    const result = await req.db.request()
-      .input("tn", sql.NVarChar(50), ticketNumber)
-      .query(`
+    const result = await req.db
+      .request()
+      .input("tn", sql.NVarChar(50), ticketNumber).query(`
         SELECT IT_Ack_Timestamp AS ts
         FROM Tickets
         WHERE Ticket_Number = @tn;
@@ -831,11 +868,11 @@ app.post("/api/acknowledge-ticket", async (req, res) => {
 
     const ts = result.recordset[0].ts;
     // 3) optional: insert a history record
-    await req.db.request()
+    await req.db
+      .request()
       .input("tn", sql.NVarChar(50), ticketNumber)
       .input("uid", sql.NVarChar(255), userID)
-      .input("cmt", sql.NVarChar(255), comment || "IT Acknowledged")
-      .query(`
+      .input("cmt", sql.NVarChar(255), comment || "IT Acknowledged").query(`
         INSERT INTO History
           (HTicket_Number, UserID, Comment, Action_Type, Before_State, After_State, Timestamp, IsRead)
         VALUES
@@ -1333,14 +1370,15 @@ app.get("/api/locations", async (req, res) => {
       FROM EMP 
       WHERE Dept = ${department}
     `;
-    const locations = result.recordset.map(r => r.EmpLocation).filter(Boolean);
+    const locations = result.recordset
+      .map((r) => r.EmpLocation)
+      .filter(Boolean);
     res.status(200).json(locations);
   } catch (err) {
     console.error("Error fetching locations:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 // Main endpoint handler
 app.post("/api/update-ticket", async (req, res) => {
@@ -1434,16 +1472,15 @@ app.post("/api/assignee-mappings", async (req, res) => {
   } = req.body;
 
   try {
-    await req.db.request()
+    await req.db
+      .request()
       .input("loc", sql.NVarChar(100), EmpLocation)
       .input("dept", sql.NVarChar(100), Department)
       .input("sd", sql.NVarChar(100), SubDept)
       .input("st", sql.NVarChar(100), SubTask)
       .input("tl", sql.NVarChar(100), Task_Label)
       .input("tt", sql.NVarChar(100), Ticket_Type)
-      .input("ae", sql.NVarChar(50), Assignee_EmpID)
-
-      .query(`
+      .input("ae", sql.NVarChar(50), Assignee_EmpID).query(`
         INSERT INTO Assignee
           (EmpLocation, Department, SubDept, SubTask, Task_Label, Ticket_Type, Assignee_EmpID)
         VALUES
@@ -1469,7 +1506,8 @@ app.put("/api/assignee-mappings/:id", async (req, res) => {
   } = req.body;
 
   try {
-    await req.db.request()
+    await req.db
+      .request()
       .input("id", sql.Int, id)
       .input("loc", sql.NVarChar(100), EmpLocation)
       .input("dept", sql.NVarChar(100), Department)
@@ -1477,8 +1515,7 @@ app.put("/api/assignee-mappings/:id", async (req, res) => {
       .input("st", sql.NVarChar(100), SubTask)
       .input("tl", sql.NVarChar(100), Task_Label)
       .input("tt", sql.NVarChar(100), Ticket_Type)
-      .input("ae", sql.NVarChar(50), Assignee_EmpID)
-      .query(`
+      .input("ae", sql.NVarChar(50), Assignee_EmpID).query(`
         UPDATE Assignee
         SET
           EmpLocation   = @loc,
@@ -1500,7 +1537,8 @@ app.put("/api/assignee-mappings/:id", async (req, res) => {
 app.delete("/api/assignee-mappings/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    await req.db.request()
+    await req.db
+      .request()
       .input("id", sql.Int, id)
       .query(`DELETE FROM Assignee WHERE MappingID = @id`);
     res.status(200).json({ message: "Mapping deleted" });
@@ -1617,6 +1655,143 @@ app.post("/api/tickets/respond-resolution", async (req, res) => {
   }
 });
 
+// ── CRUD for Companies ──────────────────────────────────────────────────────
+
+// GET all companies
+app.get("/api/companies", async (req, res) => {
+  try {
+    const result = await req.db.request().query(`
+      SELECT CompanyCode, CompanyShortName, CompanyName
+      FROM dbo.Companies
+      ORDER BY CompanyCode
+    `);
+    res.status(200).json(result.recordset);
+  } catch (err) {
+    console.error("Error fetching companies:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// GET one company by code
+app.get("/api/companies/:code", async (req, res) => {
+  const { code } = req.params;
+  try {
+    const result = await req.db
+      .request()
+      .input("code", sql.Int, code)
+      .query(`
+        SELECT CompanyCode, CompanyShortName, CompanyName
+        FROM dbo.Companies
+        WHERE CompanyCode = @code
+      `);
+    if (!result.recordset.length) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("Error fetching company:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// CREATE a new company
+app.post("/api/companies", async (req, res) => {
+  const { CompanyCode, CompanyShortName, CompanyName } = req.body;
+  try {
+    await req.db
+      .request()
+      .input("code", sql.Int, CompanyCode)
+      .input("short", sql.NVarChar(50), CompanyShortName)
+      .input("name", sql.NVarChar(255), CompanyName)
+      .query(`
+        INSERT INTO dbo.Companies (CompanyCode, CompanyShortName, CompanyName)
+        VALUES (@code, @short, @name)
+      `);
+    res.status(201).json({ message: "Company created" });
+  } catch (err) {
+    console.error("Error creating company:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// UPDATE an existing company
+app.put("/api/companies/:code", async (req, res) => {
+  const { code } = req.params;
+  const { CompanyShortName, CompanyName } = req.body;
+  try {
+    const result = await req.db
+      .request()
+      .input("code", sql.Int, code)
+      .input("short", sql.NVarChar(50), CompanyShortName)
+      .input("name", sql.NVarChar(255), CompanyName)
+      .query(`
+        UPDATE dbo.Companies
+        SET CompanyShortName = @short,
+            CompanyName      = @name
+        WHERE CompanyCode = @code
+      `);
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+    res.json({ message: "Company updated" });
+  } catch (err) {
+    console.error("Error updating company:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// DELETE a company
+app.delete("/api/companies/:code", async (req, res) => {
+  const { code } = req.params;
+  try {
+    const result = await req.db
+      .request()
+      .input("code", sql.Int, code)
+      .query(`
+        DELETE FROM dbo.Companies
+        WHERE CompanyCode = @code
+      `);
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+    res.json({ message: "Company deleted" });
+  } catch (err) {
+    console.error("Error deleting company:", err);
+    // probably a FK violation if there are Locations pointing here
+    if (err.number === 547) {
+      return res
+        .status(400)
+        .json({ message: "Cannot delete ‑ locations exist for this company" });
+    }
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ── New endpoint: return all IT‐department employees for the org chart ──
+app.get("/api/it-org-chart", async (req, res) => {
+  try {
+    const result = await req.db.request().query(`
+      SELECT EmpID, EmpName
+      FROM EMP
+      WHERE Dept = 'IT'
+      ORDER BY EmpName
+    `);
+    // wrap them in a root node so Recharts Treemap can use `children`
+    res.json([
+      {
+        name: "IT Department",
+        children: result.recordset.map((e) => ({
+          name: e.EmpName,
+          size: 1,
+          EmpID: e.EmpID,
+        })),
+      },
+    ]);
+  } catch (err) {
+    console.error("Error fetching IT org chart:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // New route: Auto-close tickets that have remained in "Resolved" state for 7+ days
 app.post("/api/auto-close-tickets", async (req, res) => {
@@ -1821,9 +1996,9 @@ app.get("/api/ticket-history", async (req, res) => {
   }
 
   try {
-    const result = await req.db.request()
-      .input("tn", sql.NVarChar(50), ticketNumber)
-      .query(`
+    const result = await req.db
+      .request()
+      .input("tn", sql.NVarChar(50), ticketNumber).query(`
         SELECT
           H.HTicket_Number,
           H.Action_Type,
@@ -1888,6 +2063,38 @@ app.get("/api/getHODForDept", async (req, res) => {
 app.post("/api/logout", (req, res) => {
   // Invalidate session here if applicable.
   res.status(200).json({ message: "Logout successful" });
+});
+
+app.get("/api/search-employees", async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (!q) return res.json([]);
+
+  try {
+    console.log("🔍 search‑employees q=", q);
+
+    const request = req.db.request();
+    // give NVARCHAR a length
+    request.input("q", sql.NVarChar(100), `${q}%`);
+
+    const result = await request.query(`
+      SELECT DISTINCT
+        LEFT(EmpEmail, CHARINDEX('@', EmpEmail) - 1) AS username
+      FROM EMP
+      WHERE EmpEmail LIKE @q + '@%'
+        AND CHARINDEX('@', EmpEmail) > 1
+        AND ActiveFlag = 1
+      ORDER BY username
+    `);
+
+    const suggestions = result.recordset
+      .map((r) => r.username)
+      .slice(0, 10);
+
+    return res.json(suggestions);
+  } catch (err) {
+    console.error("❌ /api/search-employees failed:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
 });
 
 // Endpoint to fetch all employees in the logged-in user's department
