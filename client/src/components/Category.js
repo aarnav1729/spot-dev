@@ -3,6 +3,11 @@ import React, { useState, useEffect } from "react";
 import styled, { css } from "styled-components";
 import Sidebar from "./Sidebar";
 import axios from "axios";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+} from "react-beautiful-dnd";
 
 const API = window.location.origin;
 
@@ -13,7 +18,6 @@ const Container = styled.div`
   background: #f0f4f8;
   min-height: calc(100vh - 70px);
 `;
-
 const Content = styled.main`
   flex: 1;
   padding: 24px;
@@ -22,13 +26,11 @@ const Content = styled.main`
 const PageHeader = styled.div`
   margin-bottom: 24px;
 `;
-
 const PageTitle = styled.h1`
   color: #0f6ab0;
   margin: 0;
   font-size: 28px;
 `;
-
 const PageSubtitle = styled.p`
   color: #666;
   margin: 4px 0 0;
@@ -51,20 +53,17 @@ const Card = styled.section`
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 `;
-
 const CardHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 16px;
 `;
-
 const CardTitle = styled.h2`
   margin: 0;
   font-size: 20px;
   color: #333;
 `;
-
 const CardSubtitle = styled.p`
   margin: 4px 0 0;
   color: #666;
@@ -83,7 +82,6 @@ const SearchInput = styled.input`
     box-shadow: 0 0 6px rgba(15,106,176,0.2);
   }
 `;
-
 const PrimaryButton = styled.button`
   background-color: #0f6ab0;
   color: #fff;
@@ -104,19 +102,16 @@ const FormGrid = styled.form`
   margin-bottom: 16px;
   align-items: flex-end;
 `;
-
 const Field = styled.div`
   display: flex;
   flex-direction: column;
 `;
-
 const Label = styled.label`
   font-size: 13px;
   margin-bottom: 4px;
   color: #0f6ab0;
   font-weight: 600;
 `;
-
 const Input = styled.input`
   padding: 8px 12px;
   font-size: 14px;
@@ -128,14 +123,12 @@ const Input = styled.input`
     box-shadow: 0 0 6px rgba(15,106,176,0.2);
   }
 `;
-
 const FormActions = styled.div`
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 `;
-
 const SecondaryButton = styled.button`
   background: transparent;
   border: 1px solid #ccc;
@@ -163,7 +156,6 @@ const Table = styled.table`
     text-align: left;
   }
 `;
-
 const TableRow = styled.tr`
   cursor: pointer;
   ${({ selected }) => selected && css`
@@ -173,7 +165,6 @@ const TableRow = styled.tr`
     background: rgba(15, 106, 176, 0.05);
   }
 `;
-
 const ActionButton = styled.button`
   background: none;
   border: none;
@@ -181,12 +172,6 @@ const ActionButton = styled.button`
   cursor: pointer;
   margin-right: 8px;
   &:hover { color: #0d5a99; }
-`;
-
-const ErrorMsg = styled.p`
-  color: #a00;
-  margin-top: 12px;
-  text-align: center;
 `;
 
 // ─── component ─────────────────────────────────────────────────────────
@@ -197,7 +182,6 @@ export default function Category() {
   const [catForm, setCatForm] = useState({ id: null, name: "" });
   const [catEditing, setCatEditing] = useState(false);
   const [catSearch, setCatSearch] = useState("");
-
   // subcategories state
   const [selectedCat, setSelectedCat] = useState({ id: null, name: "" });
   const [subcats, setSubcats] = useState([]);
@@ -205,9 +189,10 @@ export default function Category() {
   const [subEditing, setSubEditing] = useState(false);
   const [subSearch, setSubSearch] = useState("");
 
-  // load categories once
-  useEffect(() => { fetchCategories() }, []);
+  // ─── fetchers ─────────────────────────────────────────────────────────
 
+  // load categories once
+  useEffect(() => { fetchCategories(); }, []);
   // when categories load, auto-select first
   useEffect(() => {
     if (!selectedCat.id && categories.length) {
@@ -217,15 +202,16 @@ export default function Category() {
 
   async function fetchCategories() {
     try {
+      // now orders by your new Sequence column
       const { data } = await axios.get(`${API}/api/categories`);
       setCategories(data);
     } catch {
       alert("Failed to load categories");
     }
   }
-
   async function fetchSubcats(catId) {
     try {
+      // now orders by your new Sequence column
       const { data } = await axios.get(`${API}/api/subcategories`, {
         params: { categoryId: catId }
       });
@@ -235,7 +221,7 @@ export default function Category() {
     }
   }
 
-  // ── CATEGORY CRUD ─────────────────────────────────────
+  // ── CATEGORY CRUD ─────────────────────────────────────────────────────
 
   async function handleCatSubmit(e) {
     e.preventDefault();
@@ -252,13 +238,11 @@ export default function Category() {
       alert("Save failed");
     }
   }
-
   function handleCatEdit(c) {
     setCatEditing(true);
     setCatForm({ id: c.id, name: c.name });
     handleCatSelect(c);
   }
-
   async function handleCatDelete(id) {
     if (!window.confirm("Delete this category and all its subcategories?")) return;
     try {
@@ -269,12 +253,10 @@ export default function Category() {
       alert("Delete failed");
     }
   }
-
   function resetCatForm() {
     setCatEditing(false);
     setCatForm({ id: null, name: "" });
   }
-
   function handleCatSelect(c) {
     setSelectedCat(c);
     resetCatForm();
@@ -282,7 +264,7 @@ export default function Category() {
     fetchSubcats(c.id);
   }
 
-  // ── SUBCATEGORY CRUD ──────────────────────────────────
+  // ── SUBCATEGORY CRUD ─────────────────────────────────────────────────
 
   async function handleSubSubmit(e) {
     e.preventDefault();
@@ -302,12 +284,10 @@ export default function Category() {
       alert("Save failed");
     }
   }
-
   function handleSubEdit(s) {
     setSubEditing(true);
     setSubForm({ id: s.id, name: s.name });
   }
-
   async function handleSubDelete(id) {
     if (!window.confirm("Delete this subcategory?")) return;
     try {
@@ -317,22 +297,53 @@ export default function Category() {
       alert("Delete failed");
     }
   }
-
   function resetSubForm() {
     setSubEditing(false);
     setSubForm({ id: null, name: "" });
   }
 
-  // ── filtered lists ─────────────────────────────────────
+  // ── DRAG & DROP HANDLERS ──────────────────────────────────────────────
+
+  const onCatDragEnd = async (result) => {
+    const { source, destination } = result;
+    if (!destination || source.index === destination.index) return;
+    const reordered = Array.from(categories);
+    const [moved] = reordered.splice(source.index, 1);
+    reordered.splice(destination.index, 0, moved);
+    setCategories(reordered);
+    try {
+      await axios.post(`${API}/api/categories/reorder`, {
+        orderedIds: reordered.map((c) => c.id),
+      });
+    } catch {
+      alert("Failed to save new category order");
+    }
+  };
+
+  const onSubDragEnd = async (result) => {
+    const { source, destination } = result;
+    if (!destination || source.index === destination.index) return;
+    const reordered = Array.from(subcats);
+    const [moved] = reordered.splice(source.index, 1);
+    reordered.splice(destination.index, 0, moved);
+    setSubcats(reordered);
+    try {
+      await axios.post(`${API}/api/subcategories/reorder`, {
+        categoryId: selectedCat.id,
+        orderedIds: reordered.map((s) => s.id),
+      });
+    } catch {
+      alert("Failed to save new subcategory order");
+    }
+  };
+
+  // ── filtered lists ─────────────────────────────────────────────────────
 
   const visibleCats = categories.filter(c =>
-    c.name.toLowerCase().includes(catSearch.toLowerCase()) ||
-    c.id.toLowerCase().includes(catSearch.toLowerCase())
+    c.name.toLowerCase().includes(catSearch.toLowerCase())
   );
-
   const visibleSubs = subcats.filter(s =>
-    s.name.toLowerCase().includes(subSearch.toLowerCase()) ||
-    s.id.toLowerCase().includes(subSearch.toLowerCase())
+    s.name.toLowerCase().includes(subSearch.toLowerCase())
   );
 
   return (
@@ -345,7 +356,6 @@ export default function Category() {
         </PageHeader>
 
         <CardsGrid>
-
           {/* ── Categories Card ──────────────────────────────────────────────── */}
           <Card>
             <CardHeader>
@@ -359,7 +369,7 @@ export default function Category() {
                   value={catSearch}
                   onChange={e => setCatSearch(e.target.value)}
                 />
-                <PrimaryButton onClick={() => { resetCatForm(); setCatEditing(false); }}>
+                <PrimaryButton onClick={() => resetCatForm()}>
                   + Add Category
                 </PrimaryButton>
               </div>
@@ -385,34 +395,55 @@ export default function Category() {
               </FormActions>
             </FormGrid>
 
-            <Table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Category Name</th>
-                  <th style={{ width: 100 }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleCats.map(c => (
-                  <TableRow
-                    key={c.id}
-                    selected={selectedCat.id === c.id}
-                    onClick={e => {
-                      // if click target is not an action button, select row
-                      if (!e.target.closest("button")) handleCatSelect(c);
-                    }}
-                  >
-                    <td>{c.id}</td>
-                    <td>{c.name}</td>
-                    <td>
-                      <ActionButton onClick={() => handleCatEdit(c)}>✏️</ActionButton>
-                      <ActionButton onClick={() => handleCatDelete(c.id)}>🗑️</ActionButton>
-                    </td>
-                  </TableRow>
-                ))}
-              </tbody>
-            </Table>
+            <DragDropContext onDragEnd={onCatDragEnd}>
+              <Droppable droppableId="categories">
+                {(provided) => (
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: "32px" }}>⇅</th>
+                        <th>ID</th>
+                        <th>Category Name</th>
+                        <th style={{ width: 100 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                    >
+                      {visibleCats.map((c, idx) => (
+                        <Draggable
+                          key={c.id}
+                          draggableId={`cat-${c.id}`}
+                          index={idx}
+                        >
+                          {(prov) => (
+                            <TableRow
+                              ref={prov.innerRef}
+                              {...prov.draggableProps}
+                              {...prov.dragHandleProps}
+                              selected={selectedCat.id === c.id}
+                              onClick={(e) => {
+                                if (!e.target.closest("button")) handleCatSelect(c);
+                              }}
+                            >
+                              <td>☰</td>
+                              <td>{c.id}</td>
+                              <td>{c.name}</td>
+                              <td>
+                                <ActionButton onClick={() => handleCatEdit(c)}>✏️</ActionButton>
+                                <ActionButton onClick={() => handleCatDelete(c.id)}>🗑️</ActionButton>
+                              </td>
+                            </TableRow>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </tbody>
+                  </Table>
+                )}
+              </Droppable>
+            </DragDropContext>
           </Card>
 
           {/* ── Subcategories Card ──────────────────────────────────────────── */}
@@ -464,31 +495,54 @@ export default function Category() {
                   </FormActions>
                 </FormGrid>
 
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Subcategory Name</th>
-                      <th style={{ width: 100 }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleSubs.map(s => (
-                      <tr key={s.id}>
-                        <td>{s.id}</td>
-                        <td>{s.name}</td>
-                        <td>
-                          <ActionButton onClick={() => handleSubEdit(s)}>✏️</ActionButton>
-                          <ActionButton onClick={() => handleSubDelete(s.id)}>🗑️</ActionButton>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                <DragDropContext onDragEnd={onSubDragEnd}>
+                  <Droppable droppableId="subcategories">
+                    {(provided) => (
+                      <Table>
+                        <thead>
+                          <tr>
+                            <th style={{ width: "32px" }}>⇅</th>
+                            <th>ID</th>
+                            <th>Subcategory Name</th>
+                            <th style={{ width: 100 }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                        >
+                          {visibleSubs.map((s, idx) => (
+                            <Draggable
+                              key={s.id}
+                              draggableId={`sub-${s.id}`}
+                              index={idx}
+                            >
+                              {(prov) => (
+                                <TableRow
+                                  ref={prov.innerRef}
+                                  {...prov.draggableProps}
+                                  {...prov.dragHandleProps}
+                                >
+                                  <td>☰</td>
+                                  <td>{s.id}</td>
+                                  <td>{s.name}</td>
+                                  <td>
+                                    <ActionButton onClick={() => handleSubEdit(s)}>✏️</ActionButton>
+                                    <ActionButton onClick={() => handleSubDelete(s.id)}>🗑️</ActionButton>
+                                  </td>
+                                </TableRow>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </tbody>
+                      </Table>
+                    )}
+                  </Droppable>
+                </DragDropContext>
               </>
             )}
           </Card>
-
         </CardsGrid>
       </Content>
     </Container>

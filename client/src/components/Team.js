@@ -370,7 +370,7 @@ export default function Team() {
             <TeamMemberName>{IT_ORG.EmpName}</TeamMemberName>
             <TeamMemberDetails>{IT_ORG.title}</TeamMemberDetails>
             <TicketCount>
-              {ticketCounts[IT_ORG.EmpID] || 0} open ticket
+              {ticketCounts[IT_ORG.EmpID] || 0} open incidents
               {(ticketCounts[IT_ORG.EmpID] || 0) !== 1 && "s"}
             </TicketCount>
           </TeamMemberCard>
@@ -386,7 +386,7 @@ export default function Team() {
                   <TeamMemberName>{m.EmpName}</TeamMemberName>
                   <TeamMemberDetails>{m.title}</TeamMemberDetails>
                   <TicketCount>
-                    {ticketCounts[m.EmpID] || 0} open ticket
+                    {ticketCounts[m.EmpID] || 0} open incidents
                     {(ticketCounts[m.EmpID] || 0) !== 1 && "s"}
                   </TicketCount>
                 </TeamMemberCard>
@@ -402,7 +402,7 @@ export default function Team() {
                       <TeamMemberName>{c.EmpName}</TeamMemberName>
                       <TeamMemberDetails>{c.title}</TeamMemberDetails>
                       <TicketCount>
-                        {ticketCounts[c.EmpID] || 0} open ticket
+                        {ticketCounts[c.EmpID] || 0} open incidents
                         {(ticketCounts[c.EmpID] || 0) !== 1 && "s"}
                       </TicketCount>
                     </TeamMemberCard>
@@ -424,7 +424,7 @@ export default function Team() {
                 <TeamMemberName>{o.EmpName}</TeamMemberName>
                 <TeamMemberDetails>{o.title}</TeamMemberDetails>
                 <TicketCount>
-                  {ticketCounts[o.EmpID] || 0} open ticket
+                  {ticketCounts[o.EmpID] || 0} open incidents
                   {(ticketCounts[o.EmpID] || 0) !== 1 && "s"}
                 </TicketCount>
               </TeamMemberCard>
@@ -438,18 +438,18 @@ export default function Team() {
         <ModalOverlay onClick={closeModal}>
           <ModalContent onClick={e => e.stopPropagation()}>
             <ModalHeader>
-              <h2>{selected.EmpName}’s Open Tickets</h2>
+              <h2>{selected.EmpName}’s Open incidents</h2>
               <CloseBtn onClick={closeModal}>×</CloseBtn>
             </ModalHeader>
             {ticketsLoading ? (
-              <p>Loading tickets…</p>
+              <p>Loading incidents...</p>
             ) : tickets.length === 0 ? (
-              <p>No open tickets.</p>
+              <p>No open incidents.</p>
             ) : (
               <TicketTable>
                 <thead>
                   <tr>
-                    <th>Ticket #</th>
+                    <th>Incident #</th>
                     <th>Title</th>
                     <th>Status</th>
                     {userDept === "IT" && <th>Action</th>}

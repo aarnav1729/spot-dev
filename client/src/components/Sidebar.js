@@ -12,8 +12,11 @@ import {
   FaUsers,
   FaQuestionCircle,
   FaPenSquare,
-} from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+  FaIndustry,
+  FaMapMarkerAlt,
+  FaListAlt,
+} from "react-icons/fa"; // Added new icons
+import { useNavigate, useLocation } from "react-router-dom"; // Added useLocation
 import axios from "axios";
 const API_BASE_URL = window.location.origin;
 
@@ -79,15 +82,14 @@ const LogoutButton = styled(SidebarItem)`
   margin-top: auto;
 `;
 
-const Sidebar = ({ activeTab }) => {
+const Sidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation(); // Get current location
 
-  // We still fetch HOD status for conditional display of Department option.
   const storedUsername = localStorage.getItem("username");
   const empID = localStorage.getItem("empID");
   const [isHOD, setIsHOD] = useState(false);
-
   const [isAssignee, setIsAssignee] = useState(false);
 
   useEffect(() => {
@@ -108,39 +110,14 @@ const Sidebar = ({ activeTab }) => {
     }
   }, [empID]);
 
-  useEffect(() => {
-    if (storedUsername && empID) {
-      (async () => {
-        try {
-          const userRes = await axios.get(`${API_BASE_URL}/api/user`, {
-            params: { email: storedUsername },
-          });
-          const userDept = userRes.data.Dept;
-          const hodRes = await axios.get(`${API_BASE_URL}/api/getHODForDept`, {
-            params: { dept: userDept },
-          });
-          console.log("Logged in EmpID:", empID);
-          console.log("User's Department:", userDept);
-          console.log("HODID for user's department:", hodRes.data.HODID);
-        } catch (error) {
-          console.error("Error fetching department or HODID:", error);
-        }
-      })();
-    }
-  }, [storedUsername, empID]);
-
-  // Logout handler
-  // Sidebar.js (logout handler portion)
   const handleLogout = async () => {
     try {
       await axios.post(`${API_BASE_URL}/api/logout`);
     } catch (error) {
       console.error("Logout error:", error);
     }
-    // Clear stored login data
     localStorage.removeItem("username");
     localStorage.removeItem("empID");
-    // Redirect to landing page
     navigate("/login");
   };
 
@@ -149,7 +126,9 @@ const Sidebar = ({ activeTab }) => {
   };
 
   const handleNavigation = (path) => {
-    navigate(path);
+    if (location.pathname !== path) {
+      navigate(path); // Ensure navigation only happens if the path is different
+    }
   };
 
   return (
@@ -160,71 +139,69 @@ const Sidebar = ({ activeTab }) => {
         </SidebarToggle>
 
         <SidebarItem
-          active={activeTab === "User Profile"}
+          active={location.pathname === "/profile"}
           collapsed={collapsed}
           onClick={() => handleNavigation("/profile")}
         >
           <FaUser />
           <SidebarItemText collapsed={collapsed}>
-            Tickets' Overview
+            Incidents' Overview
           </SidebarItemText>
         </SidebarItem>
 
         {isHOD && (
           <>
             <SidebarItem
-              active={activeTab === "Department"}
+              active={location.pathname === "/department"}
               collapsed={collapsed}
-              onClick={() => navigate("/department")}
+              onClick={() => handleNavigation("/department")}
             >
-              <FaBuilding />
-              <SidebarItemText collapsed={collapsed}>
-                Department
-              </SidebarItemText>
+              <FaTasks />
+              <SidebarItemText collapsed={collapsed}>Department</SidebarItemText>
             </SidebarItem>
 
             <SidebarItem
-              active={activeTab === "Assignee Mappings"}
+              active={location.pathname === "/assignee-mappings"}
               collapsed={collapsed}
-              onClick={() => navigate("/assignee-mappings")}
+              onClick={() => handleNavigation("/assignee-mappings")}
             >
               <FaTasks />
               <SidebarItemText collapsed={collapsed}>
                 Assignee Mappings
               </SidebarItemText>
             </SidebarItem>
-            {/* NEW: Companies page link, HOD only */}
+
             <SidebarItem
-              active={activeTab === "Companies"}
+              active={location.pathname === "/companies"}
               collapsed={collapsed}
-              onClick={() => navigate("/companies")}
+              onClick={() => handleNavigation("/companies")}
             >
-              <FaBuilding />
+              <FaIndustry />
               <SidebarItemText collapsed={collapsed}>Companies</SidebarItemText>
             </SidebarItem>
 
             <SidebarItem
-              active={activeTab === "Locations"}
+              active={location.pathname === "/locations"}
               collapsed={collapsed}
-              onClick={() => navigate("/locations")}
+              onClick={() => handleNavigation("/locations")}
             >
-              <FaBuilding />
+              <FaMapMarkerAlt />
               <SidebarItemText collapsed={collapsed}>Locations</SidebarItemText>
             </SidebarItem>
 
             <SidebarItem
-              active={activeTab === "Category"}
+              active={location.pathname === "/category"}
               collapsed={collapsed}
-              onClick={() => navigate("/category")}
+              onClick={() => handleNavigation("/category")}
             >
-              <FaBuilding />
+              <FaListAlt />
               <SidebarItemText collapsed={collapsed}>Category</SidebarItemText>
             </SidebarItem>
           </>
         )}
 
         <SidebarItem
-          active={activeTab === "Dashboard"}
+          active={location.pathname === "/dashboard"}
           collapsed={collapsed}
           onClick={() => handleNavigation("/dashboard")}
         >
@@ -233,7 +210,7 @@ const Sidebar = ({ activeTab }) => {
         </SidebarItem>
 
         <SidebarItem
-          active={activeTab === "Create Ticket"}
+          active={location.pathname === "/ticket"}
           collapsed={collapsed}
           onClick={() => handleNavigation("/ticket")}
         >
@@ -245,31 +222,14 @@ const Sidebar = ({ activeTab }) => {
 
         {isAssignee && (
           <SidebarItem
-            active={activeTab === "IT Org Chart"}
+            active={location.pathname === "/team"}
             collapsed={collapsed}
             onClick={() => handleNavigation("/team")}
           >
             <FaUsers />
-            <SidebarItemText collapsed={collapsed}>
-              IT Org Chart
-            </SidebarItemText>
+            <SidebarItemText collapsed={collapsed}>IT Org Chart</SidebarItemText>
           </SidebarItem>
         )}
-
-        {/* Removed Priority Tasks SidebarItem 
-
-
-
-        <SidebarItem
-          active={activeTab === "FAQ's"}
-          collapsed={collapsed}
-          onClick={() => handleNavigation("/faqs")}
-        >
-          <FaQuestionCircle />
-          <SidebarItemText collapsed={collapsed}>FAQ's</SidebarItemText>
-        </SidebarItem>
-
-        {/* Removed Notifications SidebarItem */}
 
         <LogoutButton collapsed={collapsed} onClick={handleLogout}>
           <FaSignOutAlt />

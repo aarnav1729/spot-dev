@@ -172,24 +172,21 @@ export default function AssigneeMappings() {
   const navigate = useNavigate();
   const [mappings, setMappings] = useState([]);
   const [columnFilters, setColumnFilters] = useState({
-    company: "",
     location: "",
-    department: "",
-    subdept: "",
+
     subtask: "",
     task_label: "",
-    ticket_type: "",
+
     assignee_empid: "",
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
   // dropdown options
   const [locationsOpts, setLocationsOpts] = useState([]);
-  const [departmentsOpts, setDepartmentsOpts] = useState([]);
-  const [subDeptOpts, setSubDeptOpts] = useState([]);
+
   const [subTaskOpts, setSubTaskOpts] = useState([]);
   const [taskLabelOpts, setTaskLabelOpts] = useState([]);
-  const [ticketTypeOpts, setTicketTypeOpts] = useState([]);
+
   const [assigneeEmpOpts, setAssigneeEmpOpts] = useState([]);
 
   // modal state
@@ -198,16 +195,12 @@ export default function AssigneeMappings() {
   const [form, setForm] = useState({
     EmpLocation: "",
     EmpLocationOther: "",
-    Department: "",
-    DepartmentOther: "",
-    SubDept: "",
-    SubDeptOther: "",
+
     SubTask: "",
     SubTaskOther: "",
     Task_Label: "",
     Task_LabelOther: "",
-    Ticket_Type: "",
-    Ticket_TypeOther: "",
+
     Assignee_EmpID: "",
     Assignee_EmpIDOther: "",
   });
@@ -217,15 +210,12 @@ export default function AssigneeMappings() {
     try {
       const { data } = await axios.get(`${API_BASE_URL}/api/assignee-mappings`);
       setMappings(data);
-
-      // derive dropdown lists
       const uniq = (arr) => Array.from(new Set(arr)).sort();
       setLocationsOpts(uniq(data.map((m) => m.EmpLocation)));
-      setDepartmentsOpts(uniq(data.map((m) => m.Department)));
-      setSubDeptOpts(uniq(data.map((m) => m.SubDept)));
+
       setSubTaskOpts(uniq(data.map((m) => m.SubTask)));
       setTaskLabelOpts(uniq(data.map((m) => m.Task_Label)));
-      setTicketTypeOpts(uniq(data.map((m) => m.Ticket_Type)));
+
       setAssigneeEmpOpts(uniq(data.map((m) => String(m.Assignee_EmpID))));
     } catch (e) {
       console.error(e);
@@ -241,16 +231,12 @@ export default function AssigneeMappings() {
     setForm({
       EmpLocation: "",
       EmpLocationOther: "",
-      Department: "",
-      DepartmentOther: "",
-      SubDept: "",
-      SubDeptOther: "",
+
       SubTask: "",
       SubTaskOther: "",
       Task_Label: "",
       Task_LabelOther: "",
-      Ticket_Type: "",
-      Ticket_TypeOther: "",
+
       Assignee_EmpID: "",
       Assignee_EmpIDOther: "",
     });
@@ -262,16 +248,12 @@ export default function AssigneeMappings() {
     setForm({
       EmpLocation: row.EmpLocation,
       EmpLocationOther: "",
-      Department: row.Department,
-      DepartmentOther: "",
-      SubDept: row.SubDept,
-      SubDeptOther: "",
+
       SubTask: row.SubTask,
       SubTaskOther: "",
       Task_Label: row.Task_Label,
       Task_LabelOther: "",
-      Ticket_Type: row.Ticket_Type,
-      Ticket_TypeOther: "",
+
       Assignee_EmpID: String(row.Assignee_EmpID),
       Assignee_EmpIDOther: "",
     });
@@ -289,7 +271,6 @@ export default function AssigneeMappings() {
     setForm((f) => ({ ...f, [name]: value }));
   };
 
-  // generic select handler to clear Other‑field when picking a real option
   const handleSelect = (field) => (e) => {
     const val = e.target.value;
     setForm((f) => ({
@@ -300,35 +281,28 @@ export default function AssigneeMappings() {
   };
 
   const handleSubmit = async () => {
-    // build payload picking "Other" if needed
     const pick = (f) =>
       form[f] === "__other" ? form[`${f}Other`].trim() : form[f].trim();
-
     const payload = {
       EmpLocation: pick("EmpLocation"),
-      Department: pick("Department"),
-      SubDept: pick("SubDept"),
+
       SubTask: pick("SubTask"),
       Task_Label: pick("Task_Label"),
-      Ticket_Type: pick("Ticket_Type"),
+
       Assignee_EmpID: pick("Assignee_EmpID"),
     };
-
-    // append newly created "Other" into local options
     const appendIfOther = (opts, f) => {
       if (form[f] === "__other" && payload[f] && !opts.includes(payload[f])) {
         opts.push(payload[f]);
       }
     };
     appendIfOther(locationsOpts, "EmpLocation");
-    appendIfOther(departmentsOpts, "Department");
-    appendIfOther(subDeptOpts, "SubDept");
+
     appendIfOther(subTaskOpts, "SubTask");
     appendIfOther(taskLabelOpts, "Task_Label");
-    appendIfOther(ticketTypeOpts, "Ticket_Type");
+
     appendIfOther(assigneeEmpOpts, "Assignee_EmpID");
 
-    // send create/update
     if (editingId) {
       await axios.put(
         `${API_BASE_URL}/api/assignee-mappings/${editingId}`,
@@ -337,12 +311,10 @@ export default function AssigneeMappings() {
     } else {
       await axios.post(`${API_BASE_URL}/api/assignee-mappings`, payload);
     }
-
     setShowModal(false);
     fetchAll();
   };
 
-  // helper to render a dropdown + optional Other textbox
   const renderField = (label, field, opts) => (
     <FormRow key={field}>
       <Label>{label}</Label>
@@ -366,7 +338,6 @@ export default function AssigneeMappings() {
     </FormRow>
   );
 
-  // sort handler
   const handleSort = (key) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
@@ -379,34 +350,23 @@ export default function AssigneeMappings() {
     });
   };
 
-  // filter + sort process
   const processedRows = React.useMemo(() => {
-    // map EmpLocation into company/location
-    const rows = mappings.map((m) => {
-      const [company, location] = m.EmpLocation.split(/\s*-\s*/, 2);
-      return {
-        ...m,
-        company: company || "",
-        location: location || "",
-        department: m.Department,
-        subdept: m.SubDept,
-        subtask: m.SubTask,
-        task_label: m.Task_Label,
-        ticket_type: m.Ticket_Type,
-        assignee_empid: String(m.Assignee_EmpID),
-      };
-    });
+    const rows = mappings.map((m) => ({
+      ...m,
+      location: m.EmpLocation,
 
-    // apply column filters
+      subtask: m.SubTask,
+      task_label: m.Task_Label,
+
+      assignee_empid: String(m.Assignee_EmpID),
+    }));
+
     const filtered = rows.filter((r) =>
       Object.entries(columnFilters).every(([col, val]) =>
-        val === ""
-          ? true
-          : r[col].toLowerCase().includes(val.toLowerCase())
+        val === "" ? true : r[col].toLowerCase().includes(val.toLowerCase())
       )
     );
 
-    // apply sorting
     if (sortConfig.key) {
       const { key, direction } = sortConfig;
       filtered.sort((a, b) => {
@@ -422,7 +382,6 @@ export default function AssigneeMappings() {
           : bVal.localeCompare(aVal);
       });
     }
-
     return filtered;
   }, [mappings, columnFilters, sortConfig]);
 
@@ -431,7 +390,6 @@ export default function AssigneeMappings() {
     setColumnFilters((f) => ({ ...f, [name]: value }));
   };
 
-  // render sort indicator
   const SortIndicator = ({ columnKey }) => {
     if (sortConfig.key !== columnKey) return null;
     return sortConfig.direction === "asc" ? " ▲" : " ▼";
@@ -451,27 +409,17 @@ export default function AssigneeMappings() {
         <Table>
           <thead>
             <tr>
-              <TH onClick={() => handleSort("company")}>
-                Company<SortIndicator columnKey="company" />
-              </TH>
               <TH onClick={() => handleSort("location")}>
                 Location<SortIndicator columnKey="location" />
               </TH>
-              <TH onClick={() => handleSort("department")}>
-                Department<SortIndicator columnKey="department" />
-              </TH>
-              <TH onClick={() => handleSort("subdept")}>
-                SubDept<SortIndicator columnKey="subdept" />
-              </TH>
+
               <TH onClick={() => handleSort("subtask")}>
                 SubTask<SortIndicator columnKey="subtask" />
               </TH>
               <TH onClick={() => handleSort("task_label")}>
                 Task Label<SortIndicator columnKey="task_label" />
               </TH>
-              <TH onClick={() => handleSort("ticket_type")}>
-                Ticket Type<SortIndicator columnKey="ticket_type" />
-              </TH>
+
               <TH onClick={() => handleSort("assignee_empid")}>
                 Assignee EmpID<SortIndicator columnKey="assignee_empid" />
               </TH>
@@ -480,36 +428,14 @@ export default function AssigneeMappings() {
             <tr>
               <TH>
                 <FilterInput
-                  name="company"
-                  value={columnFilters.company}
-                  onChange={handleFilterChange}
-                  placeholder="Filter…"
-                />
-              </TH>
-              <TH>
-                <FilterInput
                   name="location"
                   value={columnFilters.location}
                   onChange={handleFilterChange}
                   placeholder="Filter…"
                 />
               </TH>
-              <TH>
-                <FilterInput
-                  name="department"
-                  value={columnFilters.department}
-                  onChange={handleFilterChange}
-                  placeholder="Filter…"
-                />
-              </TH>
-              <TH>
-                <FilterInput
-                  name="subdept"
-                  value={columnFilters.subdept}
-                  onChange={handleFilterChange}
-                  placeholder="Filter…"
-                />
-              </TH>
+
+
               <TH>
                 <FilterInput
                   name="subtask"
@@ -526,14 +452,7 @@ export default function AssigneeMappings() {
                   placeholder="Filter…"
                 />
               </TH>
-              <TH>
-                <FilterInput
-                  name="ticket_type"
-                  value={columnFilters.ticket_type}
-                  onChange={handleFilterChange}
-                  placeholder="Filter…"
-                />
-              </TH>
+
               <TH>
                 <FilterInput
                   name="assignee_empid"
@@ -548,13 +467,11 @@ export default function AssigneeMappings() {
           <tbody>
             {processedRows.map((r) => (
               <tr key={r.MappingID}>
-                <TD>{r.company}</TD>
                 <TD>{r.location}</TD>
-                <TD>{r.department}</TD>
-                <TD>{r.subdept}</TD>
+
                 <TD>{r.subtask}</TD>
                 <TD>{r.task_label}</TD>
-                <TD>{r.ticket_type}</TD>
+
                 <TD>{r.assignee_empid}</TD>
                 <TD>
                   <ActionIcon onClick={() => openEdit(r)}>
@@ -577,12 +494,11 @@ export default function AssigneeMappings() {
                 <CloseButton onClick={() => setShowModal(false)} />
               </ModalHeader>
 
-              {renderField("EmpLocation", "EmpLocation", locationsOpts)}
-              {renderField("Department", "Department", departmentsOpts)}
-              {renderField("SubDept", "SubDept", subDeptOpts)}
+              {renderField("Location", "EmpLocation", locationsOpts)}
+
               {renderField("SubTask", "SubTask", subTaskOpts)}
               {renderField("Task Label", "Task_Label", taskLabelOpts)}
-              {renderField("Ticket Type", "Ticket_Type", ticketTypeOpts)}
+
               {renderField("Assignee EmpID", "Assignee_EmpID", assigneeEmpOpts)}
 
               <ModalFooter>

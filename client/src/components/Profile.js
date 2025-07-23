@@ -563,7 +563,7 @@ const Dashboard = () => {
       <Sidebar activeTab="User Profile" />
       <Content>
         <CreateTicketButton onClick={handleCreateTicket}>
-          Create Ticket
+          Create Incident
         </CreateTicketButton>
         <WelcomeText>Welcome Back {userData.EmpName}!</WelcomeText>
         <EmployeeDetails>
@@ -582,8 +582,8 @@ const Dashboard = () => {
               >
                 <StatusTitle>{s.title}</StatusTitle>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <StatusCount>{s.count}</StatusCount>+
-                  <div style={{ fontSize: "14px", color: "#777", marginTop: "5px" }}>
+                  <StatusCount>{s.count}</StatusCount>
+                  <div style={{ fontSize: "14px", color: "#000", marginTop: "5px" }}>
                     {s.todayCount} new today
                   </div>
                 </div>
@@ -629,7 +629,7 @@ const Dashboard = () => {
             <tr>
               {/* Ticket# */}
               <TableHeader onClick={() => handleSort("Ticket_Number")}>
-                Ticket# {sortConfig.key==="Ticket_Number"?(sortConfig.direction==="asc"?"↑":"↓"):null}
+                Incident# {sortConfig.key==="Ticket_Number"?(sortConfig.direction==="asc"?"↑":"↓"):null}
                 <input
                   type="text"
                   placeholder="Filter Ticket#"
@@ -711,7 +711,7 @@ const Dashboard = () => {
 
               {/* Deadline */}
               <TableHeader onClick={() => handleSort("Expected_Completion_Date")}>
-                Deadline {sortConfig.key==="Expected_Completion_Date"?(sortConfig.direction==="asc"?"↑":"↓"):null}
+                Pending Since {sortConfig.key==="Expected_Completion_Date"?(sortConfig.direction==="asc"?"↑":"↓"):null}
                 <input
                   type="date"
                   value={columnFilters.Expected_Completion_Date}
@@ -760,7 +760,7 @@ const Dashboard = () => {
                 <TableData>
                   {ticket.Incident_Reported_Date
                     ? new Date(ticket.Incident_Reported_Date).toISOString().split("T")[0]
-                    : "N/A"}
+                    : ticket.Creation_Date}
                 </TableData>
                 <TableData>
                   {ticket.Incident_Reported_Time
@@ -780,7 +780,7 @@ const Dashboard = () => {
                         const diff = Math.ceil((exp - today)/(1000*60*60*24));
                         if (diff>0) return `In ${diff} day${diff!==1?"s":""}`;
                         if (diff===0) return "Today";
-                        return `Overdue by ${Math.abs(diff)} day${Math.abs(diff)!==1?"s":""}`;
+                        return `${Math.abs(diff)} day${Math.abs(diff)!==1?"s":""}`;
                       })()
                     : "N/A"}
                 </TableData>

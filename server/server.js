@@ -148,6 +148,12 @@ async function sendEmail(toEmail, subject, content, attachments = []) {
   }
 }
 
+// Helper function to convert a date to IST
+function convertToIST(date) {
+  const offset = 5.5 * 60 * 60 * 1000; // IST offset in milliseconds
+  return new Date(date.getTime() + offset);
+}
+
 // ── SESSION CHECK FOR FRONTEND ─────────────────────────────────────────────────
 // (so React can read /api/session if you choose—but SPOT keeps its own login)
 app.get("/api/session", (req, res) => {
@@ -188,10 +194,10 @@ app.post("/api/send-otp", async (req, res) => {
 
       // Send OTP via email with a more formal template
       const subject =
-        "Welcome to Premier Energies Ticketing Tool – Your OTP Code";
+        "Premier Energies Ticketing Tool – Your OTP";
       const content = `
               <p>Welcome to the Premier Energies Ticketing Tool!</p>
-              <p>Thank you for registering. Your One‑Time Password (OTP) is: <strong>${otp}</strong></p>
+              <p>Your One‑Time Password (OTP) is: <strong>${otp}</strong></p>
               <p>This OTP will expire in 5 minutes.</p>
               <p>Thanks &amp; Regards,<br/>Team SPOT</p>
             `;
@@ -817,11 +823,9 @@ app.post(
 
       const tPrefix = tPrefixResult.recordset[0].TPrefix;
 
-      const creationDate = new Date();
-      const creationDateStr = creationDate
-        .toISOString()
-        .split("T")[0]
-        .replace(/-/g, "");
+      const creationDate = convertToIST(new Date());
+      const creationDateStr = creationDate.toISOString().split("T")[0];
+      const creationTimeStr = creationDate.toISOString().split("T")[1].split(".")[0];
 
       // New logic to fetch the last appended serial number and increment by one
       const lastTicketResult = await sql.query`
@@ -842,6 +846,30 @@ app.post(
       const ticketNumber = `${tPrefix}_${creationDateStr}_${serialNumber}`;
 
       console.log("Generated Ticket Number:", ticketNumber);
+      console.log("Creation Date:", creationDateStr);
+      console.log("Incident Reported Date:", incidentReportedDate);
+      console.log("Incident Reported Time:", incidentReportedTime);
+
+      // If incidentReportedDate is blank, set it to the creation date
+      const finalIncidentReportedDate =
+        incidentReportedDate && incidentReportedDate.trim() !== ""
+          ? incidentReportedDate
+          : creationDateStr;
+
+      // If incidentReportedTime is blank, set it to the creation time
+      const finalIncidentReportedTime =
+        incidentReportedTime && incidentReportedTime.trim() !== ""
+          ? incidentReportedTime
+          : creationTimeStr;
+
+      console.log(
+        "Final Incident Reported Date (IST):",
+        finalIncidentReportedDate
+      );
+      console.log(
+        "Final Incident Reported Time (IST):",
+        finalIncidentReportedTime
+      );
 
       // **IMPORTANT:** Here we update the INSERT query to include the new "Attachment" column.
       // (You will need to add a nullable NVARCHAR column named "Attachment" to your Tickets table.)
@@ -871,7 +899,7 @@ app.post(
       )
       VALUES (
         ${ticketNumber},           -- 1
-        GETDATE(),                 -- 2
+        ${creationDate},           -- 2
         'Issue',                   -- 3
         ${title},                  -- 4
         ${description},            -- 5
@@ -885,15 +913,14 @@ app.post(
         ${reporterEmpID},          -- 13
         ${reporterName},           -- 14
         ${reporterEmailFull},      -- 15
-        ${incidentReportedDate},   -- 16
-        ${incidentReportedTime},   -- 17
+        ${finalIncidentReportedDate}, -- 16
+        ${finalIncidentReportedTime}, -- 17
         ${req.files?.[0]?.filename || null}, -- 18
         NULL,                      -- 19 Expected_Completion_Date
         'In-Progress',             -- 20 TStatus
         ${assigneeSubDept}         -- 21 <-- use assigneeSubDept, not Assignee_SubDept
       )
     `;
-
       console.log("Ticket inserted into Tickets table successfully.");
 
       // Send confirmation email to reporter
@@ -908,10 +935,10 @@ app.post(
           <li><strong>Priority:</strong> ${priority}</li>
           <li><strong>Department:</strong> ${department}</li>
           <li><strong>Sub‑Department:</strong> ${subDepartment}</li>
-          <li><strong>Sub Task:</strong> ${subTask}</li>
-          <li><strong>Task Label:</strong> ${taskLabel}</li>
-          <li><strong>Incident Reported Date:</strong> ${incidentReportedDate}</li>
-          <li><strong>Incident Reported Time:</strong> ${incidentReportedTime}</li>
+          <li><strong>Category:</strong> ${subTask}</li>
+          <li><strong>Sub-category:</strong> ${taskLabel}</li>
+          <li><strong>Incident Reported Date:</strong> ${finalIncidentReportedDate}</li>
+          <li><strong>Incident Reported Time:</strong> ${finalIncidentReportedTime}</li>
           ${
             req.files && req.files.length > 0
               ? `<li><strong>Attachments:</strong> ${req.files
@@ -951,8 +978,8 @@ app.post(
       const assigneeEmail = assigneeEmailResult.recordset[0].EmpEmail;
 
       // Send email to assignee with attachments included
-      const assigneeSubject = `New Ticket Assigned to You - ${title}`;
-      const assigneeContent = `<p>A new ticket has been assigned to you with Ticket Number: ${ticketNumber}</p>
+      const assigneeSubject = `New Incident Assigned to You - ${title}`;
+      const assigneeContent = `<p>A new incident has been assigned to you with Ticket Number: ${ticketNumber}</p>
           <p>Details:</p>
           <p>Title: ${title}</p>
           <p>Description: ${description}</p>`;
@@ -966,13 +993,84 @@ app.post(
 
       res
         .status(200)
-        .json({ message: "Ticket created and emails sent successfully" });
+        .json({ message: "Incident created and emails sent successfully" });
     } catch (error) {
       console.error("Error creating ticket:", error);
       res.status(500).json({ message: "Server error" });
     }
   }
 );
+
+app.post("/api/update-ticket", async (req, res) => {
+  try {
+    // Step 1: Validate user exists (to prevent foreign key violation)
+    const userExists = await sql.query`
+      SELECT COUNT(*) as count FROM Login WHERE Username = ${req.body.UserID}
+    `;
+
+    if (userExists.recordset[0].count === 0) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    // Step 2: Get original ticket data
+    const originalTicket = await getOriginalTicket(req.body.Ticket_Number);
+
+    // Step 3: Validate expected completion date
+    const expectedCompletionDate = req.body.Expected_Completion_Date
+      ? convertToIST(new Date(req.body.Expected_Completion_Date))
+      : null;
+
+    if (
+      expectedCompletionDate &&
+      (expectedCompletionDate < new Date(originalTicket.Incident_Reported_Date) ||
+        (originalTicket.IT_Incident_Date &&
+          expectedCompletionDate < new Date(originalTicket.IT_Incident_Date)))
+    ) {
+      return res.status(400).json({
+        message:
+          "Expected completion date cannot be prior to Incident Date or IT Incident Date",
+      });
+    }
+
+    // Step 4: Update ticket details
+    req.body.Expected_Completion_Date = expectedCompletionDate;
+    await updateTicketDetails(req.body);
+
+    // Step 5: Generate history changes
+    const changes = generateHistoryChanges(
+      originalTicket,
+      req.body,
+      req.body.UserID,
+      req.body.Comment
+    );
+
+    // Step 6: Insert history records
+    await insertHistoryRecords(changes);
+
+    // Step 7: Send emails if status or expected completion date changed, or if assignee updated
+    const statusOrDateOrAssigneeChanged = changes.some(
+      (c) =>
+        c.Action_Type === "Status" ||
+        c.Action_Type === "Expected Completion Date" ||
+        c.Action_Type === "Assignee Department" ||
+        c.Action_Type === "Assignee Sub-Department" ||
+        c.Action_Type === "Assignee Employee"
+    );
+    if (statusOrDateOrAssigneeChanged) {
+      await sendStatusChangeEmail(req.body.Ticket_Number, changes);
+    }
+
+    res.status(200).json({ message: "Ticket updated successfully" });
+  } catch (error) {
+    console.error("Error updating ticket:", error);
+
+    if (error.message === "Ticket not found") {
+      return res.status(404).json({ message: error.message });
+    }
+
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 app.use("/uploads", express.static("uploads"));
 
@@ -1437,7 +1535,9 @@ const getOriginalTicket = async (Ticket_Number) => {
       TStatus, 
       Assignee_Dept, 
       Assignee_SubDept, 
-      Assignee_EmpID 
+      Assignee_EmpID,
+      Incident_Reported_Date,
+      IT_Incident_Date
     FROM Tickets
     WHERE Ticket_Number = ${Ticket_Number}
   `;
@@ -1625,60 +1725,6 @@ app.get("/api/locations", async (req, res) => {
     res.status(200).json(locations);
   } catch (err) {
     console.error("Error fetching locations:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Main endpoint handler
-app.post("/api/update-ticket", async (req, res) => {
-  try {
-    // Step 1: Validate user exists (to prevent foreign key violation)
-    const userExists = await sql.query`
-      SELECT COUNT(*) as count FROM Login WHERE Username = ${req.body.UserID}
-    `;
-
-    if (userExists.recordset[0].count === 0) {
-      return res.status(400).json({ message: "Invalid user ID" });
-    }
-
-    // Step 2: Get original ticket data
-    const originalTicket = await getOriginalTicket(req.body.Ticket_Number);
-
-    // Step 3: Update ticket details
-    await updateTicketDetails(req.body);
-
-    // Step 4: Generate history changes
-    const changes = generateHistoryChanges(
-      originalTicket,
-      req.body,
-      req.body.UserID,
-      req.body.Comment
-    );
-
-    // Step 5: Insert history records
-    await insertHistoryRecords(changes);
-
-    // Step 6: Send emails if status or expected completion date changed, or if assignee updated
-    const statusOrDateOrAssigneeChanged = changes.some(
-      (c) =>
-        c.Action_Type === "Status" ||
-        c.Action_Type === "Expected Completion Date" ||
-        c.Action_Type === "Assignee Department" ||
-        c.Action_Type === "Assignee Sub-Department" ||
-        c.Action_Type === "Assignee Employee"
-    );
-    if (statusOrDateOrAssigneeChanged) {
-      await sendStatusChangeEmail(req.body.Ticket_Number, changes);
-    }
-
-    res.status(200).json({ message: "Ticket updated successfully" });
-  } catch (error) {
-    console.error("Error updating ticket:", error);
-
-    if (error.message === "Ticket not found") {
-      return res.status(404).json({ message: error.message });
-    }
-
     res.status(500).json({ message: "Server error" });
   }
 });

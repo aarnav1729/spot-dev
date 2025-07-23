@@ -634,7 +634,7 @@ const DepartmentDashboard = () => {
       <Sidebar activeTab="Department" />
       <Content>
         <CreateTicketButton onClick={handleCreateTicket}>
-          Create Ticket
+          Create Incident
         </CreateTicketButton>
         <WelcomeText>Welcome Back {userData.EmpName}!</WelcomeText>
         <EmployeeDetails>
@@ -690,7 +690,7 @@ const DepartmentDashboard = () => {
           <thead>
             <tr>
               <TableHeader onClick={() => handleSort("Ticket_Number")}>
-                Ticket# {sortConfig.key === "Ticket_Number" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                Incident# {sortConfig.key === "Ticket_Number" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
                 <input
                   type="text"
                   placeholder="Filter Ticket#"
@@ -820,12 +820,12 @@ const DepartmentDashboard = () => {
           <ModalOverlay>
             <ModalContent>
               <ModalHeader>
-                <h2>Ticket Details</h2>
+                <h2>Incident Details</h2>
                 <CloseButton onClick={() => setShowModal(false)}>×</CloseButton>
               </ModalHeader>
               <ModalBody>
                 <DetailRow>
-                  <strong>Ticket#: </strong>{selectedTicket.Ticket_Number}
+                  <strong>Incident#: </strong>{selectedTicket.Ticket_Number}
                 </DetailRow>
                 {/* ...additional detail rows and form fields here... */}
               </ModalBody>

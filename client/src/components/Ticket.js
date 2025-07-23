@@ -381,7 +381,7 @@ const CreateTicketPage = () => {
       .post(`${API_BASE_URL}/api/create-ticket`, form)
       .then(() => {
         setSuccessMessage(
-          "Your ticket was created successfully! Check your inbox."
+          "Your incident was created successfully! Check your inbox."
         );
         setErrorMessage("");
         // reset form
@@ -412,7 +412,7 @@ const CreateTicketPage = () => {
       <Content>
         <Title>Create New Incident</Title>
         <Subtitle>
-          All fields are mandatory and must be filled before ticket submission
+          All fields are mandatory and must be filled before incident submission
         </Subtitle>
         <p
           style={{
@@ -422,7 +422,7 @@ const CreateTicketPage = () => {
             marginTop: "8px",
           }}
         >
-          Note: Tickets auto‑close 5 days after resolution and cannot be
+          Note: Incidents auto‑close 5 days after resolution and cannot be
           reopened or manually closed thereafter.
         </p>
         <Form onSubmit={handleSubmit}>
@@ -482,7 +482,7 @@ const CreateTicketPage = () => {
           <FieldHeader>Title:</FieldHeader>
           <TitleInput
             type="text"
-            placeholder="Enter ticket title"
+            placeholder="Enter incident title"
             required
             value={ticketTitle}
             onChange={(e) => setTicketTitle(e.target.value)}
@@ -540,13 +540,13 @@ const CreateTicketPage = () => {
 
           <InputRow>
             <div style={{ flex: 1 }}>
-              <FieldHeader>Urgency:</FieldHeader>
+              <FieldHeader>Priority:</FieldHeader>
               <Select
                 required
                 value={ticketUrgency}
                 onChange={(e) => setTicketUrgency(e.target.value)}
               >
-                <option value="">Select urgency</option>
+                <option value="">Select priority:</option>
                 {["High", "Medium", "Low"].map((u) => (
                   <option key={u} value={u}>
                     {u}
@@ -563,7 +563,7 @@ const CreateTicketPage = () => {
             <div style={{ flex: 1 }}>
               <FieldHeader>Incident Date:</FieldHeader>
               <Input
-                required
+                
                 type="date"
                 value={incidentDate}
                 onChange={(e) => setIncidentDate(e.target.value)}
@@ -572,7 +572,7 @@ const CreateTicketPage = () => {
             <div style={{ flex: 1 }}>
               <FieldHeader>Incident Time:</FieldHeader>
               <Input
-                required
+                
                 type="time"
                 value={incidentTime}
                 onChange={(e) => setIncidentTime(e.target.value)}
@@ -582,7 +582,7 @@ const CreateTicketPage = () => {
 
           <FieldHeader>Description:</FieldHeader>
           <TextArea
-            placeholder="Enter ticket description"
+            placeholder="Enter incident description"
             required
             value={ticketDescription}
             onChange={(e) => setTicketDescription(e.target.value)}
@@ -598,7 +598,7 @@ const CreateTicketPage = () => {
             />
           </div>
 
-          <SubmitButton type="submit">Create Ticket</SubmitButton>
+          <SubmitButton type="submit">Create Incident</SubmitButton>
         </Form>
 
         {errorMessage && <Message>{errorMessage}</Message>}

@@ -216,8 +216,8 @@ export default function Dashboard() {
       setTabs([createdByMe, assignedToMe]);
       setCurrentTab(createdByMe);
     } else {
-      setTabs([{ label: 'My Tickets', mode: 'assignedByMe' }]);
-      setCurrentTab({ label: 'My Tickets', mode: 'assignedByMe' });
+      setTabs([{ label: 'My Incidents', mode: 'assignedByMe' }]);
+      setCurrentTab({ label: 'My Incidents', mode: 'assignedByMe' });
     }
   }, [isHOD, isAssignee, userData.Dept]);
 
@@ -353,7 +353,7 @@ export default function Dashboard() {
   const priorityBarData = {
     labels: ['High','Medium','Low'],
     datasets: [{
-      label: 'Tickets by Priority',
+      label: 'Incidents by Priority',
       data: [high, medium, low],
       backgroundColor: ['#FF6D6D','#FFDD00','#61B847'],
     }],
@@ -370,7 +370,7 @@ export default function Dashboard() {
   const statusBarData = {
     labels: ['In-Progress','Resolved','Closed','Overdue','Total'],
     datasets: [{
-      label: 'Tickets by Status',
+      label: 'Incidents by Status',
       data: [inProgress, resolved, closed, overdue, total],
       backgroundColor: ['#0F6AB0','#61B847','#F57C00','#FF6D6D','#888888'],
     }],
@@ -501,7 +501,7 @@ export default function Dashboard() {
                   Priority Breakdown (Bar)
                 </ChartTitleStyled>
                 <ChartDescription>
-                  Percentage of tickets that are High, Medium, and Low Priority.
+                  Percentage of incidents that are High, Medium, and Low Priority.
                 </ChartDescription>
                 <ChartCanvasWrapper style={{ height: '300px' }}>
                   <Bar
@@ -519,7 +519,7 @@ export default function Dashboard() {
                   Priority Breakdown (Pie)
                 </ChartTitleStyled>
                 <ChartDescription>
-                  Distribution of tickets by priority level.
+                  Distribution of incidents by priority level.
                 </ChartDescription>
                 <ChartCanvasWrapper style={{ height: '300px' }}>
                   <Pie
@@ -537,10 +537,10 @@ export default function Dashboard() {
             <ChartContainer>
               <ChartWrapper>
                 <ChartTitleStyled>
-                  Tickets Status Overview (Bar)
+                  Incident Status Overview (Bar)
                 </ChartTitleStyled>
                 <ChartDescription>
-                  Breakdown of ticket statuses.
+                  Breakdown of incident statuses.
                 </ChartDescription>
                 <ChartCanvasWrapper style={{ height: '300px' }}>
                   <Bar
@@ -555,10 +555,10 @@ export default function Dashboard() {
               </ChartWrapper>
               <ChartWrapper>
                 <ChartTitleStyled>
-                  Tickets Status Overview (Pie)
+                  Incident Status Overview (Pie)
                 </ChartTitleStyled>
                 <ChartDescription>
-                  Distribution of tickets by status.
+                  Distribution of incident by status.
                 </ChartDescription>
                 <ChartCanvasWrapper style={{ height: '300px' }}>
                   <Pie
