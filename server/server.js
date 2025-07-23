@@ -148,12 +148,6 @@ async function sendEmail(toEmail, subject, content, attachments = []) {
   }
 }
 
-// Helper function to convert a date to IST
-function convertToIST(date) {
-  const offset = 5.5 * 60 * 60 * 1000; // IST offset in milliseconds
-  return new Date(date.getTime() + offset);
-}
-
 // ── SESSION CHECK FOR FRONTEND ─────────────────────────────────────────────────
 // (so React can read /api/session if you choose—but SPOT keeps its own login)
 app.get("/api/session", (req, res) => {
@@ -823,8 +817,11 @@ app.post(
 
       const tPrefix = tPrefixResult.recordset[0].TPrefix;
 
-      const creationDate = convertToIST(new Date());
-      const creationDateStr = creationDate.toISOString().split("T")[0];
+      const creationDate = new Date();
+      const creationDateStr = creationDate
+        .toISOString()
+        .split("T")[0]
+        .replace(/-/g, "");
       const creationTimeStr = creationDate.toISOString().split("T")[1].split(".")[0];
 
       // New logic to fetch the last appended serial number and increment by one
@@ -854,7 +851,7 @@ app.post(
       const finalIncidentReportedDate =
         incidentReportedDate && incidentReportedDate.trim() !== ""
           ? incidentReportedDate
-          : creationDateStr;
+          : creationDate.toISOString().split("T")[0];
 
       // If incidentReportedTime is blank, set it to the creation time
       const finalIncidentReportedTime =
@@ -863,11 +860,11 @@ app.post(
           : creationTimeStr;
 
       console.log(
-        "Final Incident Reported Date (IST):",
+        "Final Incident Reported Date:",
         finalIncidentReportedDate
       );
       console.log(
-        "Final Incident Reported Time (IST):",
+        "Final Incident Reported Time:",
         finalIncidentReportedTime
       );
 
@@ -890,8 +887,8 @@ app.post(
         Reporter_EmpID,
         Reporter_Name,
         Reporter_Email,
-        Incident_Reported_Date,
-        Incident_Reported_Time,
+        Incident_Reported_Date, -- Ensure this matches the database column name
+        Incident_Reported_Time, -- Ensure this matches the database column name
         Attachment,
         Expected_Completion_Date,
         TStatus,
@@ -899,12 +896,12 @@ app.post(
       )
       VALUES (
         ${ticketNumber},           -- 1
-        ${creationDate},           -- 2
+        GETDATE(),                 -- 2
         'Issue',                   -- 3
         ${title},                  -- 4
         ${description},            -- 5
         ${priority},               -- 6
-        ${assigneeDept},           -- 7  <-- use assigneeDept, not Assignee_Dept
+        ${assigneeDept},           -- 7
         ${subTask},                -- 8
         ${taskLabel},              -- 9
         ${assigneeEmpID},          -- 10
@@ -918,7 +915,7 @@ app.post(
         ${req.files?.[0]?.filename || null}, -- 18
         NULL,                      -- 19 Expected_Completion_Date
         'In-Progress',             -- 20 TStatus
-        ${assigneeSubDept}         -- 21 <-- use assigneeSubDept, not Assignee_SubDept
+        ${assigneeSubDept}         -- 21
       )
     `;
       console.log("Ticket inserted into Tickets table successfully.");
@@ -1016,15 +1013,13 @@ app.post("/api/update-ticket", async (req, res) => {
     const originalTicket = await getOriginalTicket(req.body.Ticket_Number);
 
     // Step 3: Validate expected completion date
-    const expectedCompletionDate = req.body.Expected_Completion_Date
-      ? convertToIST(new Date(req.body.Expected_Completion_Date))
-      : null;
-
     if (
-      expectedCompletionDate &&
-      (expectedCompletionDate < new Date(originalTicket.Incident_Reported_Date) ||
+      req.body.Expected_Completion_Date &&
+      (new Date(req.body.Expected_Completion_Date) <
+        new Date(originalTicket.Incident_Reported_Date) ||
         (originalTicket.IT_Incident_Date &&
-          expectedCompletionDate < new Date(originalTicket.IT_Incident_Date)))
+          new Date(req.body.Expected_Completion_Date) <
+            new Date(originalTicket.IT_Incident_Date)))
     ) {
       return res.status(400).json({
         message:
@@ -1033,7 +1028,6 @@ app.post("/api/update-ticket", async (req, res) => {
     }
 
     // Step 4: Update ticket details
-    req.body.Expected_Completion_Date = expectedCompletionDate;
     await updateTicketDetails(req.body);
 
     // Step 5: Generate history changes

@@ -183,6 +183,8 @@ const ConfirmationModal = styled.div`
 `;
 
 const CreateTicketPage = () => {
+  // compute today's date in YYYY-MM-DD format
+  const today = new Date().toISOString().split("T")[0];
   const [departments, setDepartments] = useState([]);
   const [subDepartments, setSubDepartments] = useState([]);
   const [subTasks, setSubTasks] = useState([]);
@@ -200,12 +202,10 @@ const CreateTicketPage = () => {
 
   const [ticketUrgency, setTicketUrgency] = useState("");
   const [urgencyDefs] = useState({
-    High:
-      "Affects core business operations, a critical service is completely down, or a large number of users are unable to perform their essential functions.",
+    High: "Affects core business operations, a critical service is completely down, or a large number of users are unable to perform their essential functions.",
     Medium:
       "A critical component or service is severely degraded, affecting a significant number of users or a key business function.",
-    Low:
-      "Affects an individual user or a smaller group of users, or a non-critical function of a system is impaired. Allows operations to continue, but with some inconvenience or reduced efficiency.",
+    Low: "Affects an individual user or a smaller group of users, or a non-critical function of a system is impaired. Allows operations to continue, but with some inconvenience or reduced efficiency.",
   });
 
   // Companies & Locations
@@ -349,6 +349,11 @@ const CreateTicketPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // block future dates on submit
+    if (incidentDate > today) {
+      setErrorMessage("Incident date cannot be in the future.");
+      return;
+    }
     if (!reporterEmail) {
       setErrorMessage("User not logged in. Please log in again.");
       return;
@@ -563,16 +568,24 @@ const CreateTicketPage = () => {
             <div style={{ flex: 1 }}>
               <FieldHeader>Incident Date:</FieldHeader>
               <Input
-                
                 type="date"
                 value={incidentDate}
-                onChange={(e) => setIncidentDate(e.target.value)}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val > today) {
+                    setErrorMessage("Incident date cannot be in the future.");
+                    setIncidentDate(today);
+                  } else {
+                    setErrorMessage("");
+                    setIncidentDate(val);
+                  }
+                }}
               />
             </div>
             <div style={{ flex: 1 }}>
               <FieldHeader>Incident Time:</FieldHeader>
               <Input
-                
                 type="time"
                 value={incidentTime}
                 onChange={(e) => setIncidentTime(e.target.value)}
