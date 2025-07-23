@@ -1,3 +1,4 @@
+// Department.js
 import React, { useState, useEffect, useMemo } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +9,6 @@ import axios from "axios";
 const API_BASE_URL = window.location.origin;
 
 // Helper function to fix reporter name duplication.
-// Updated to ensure the input is treated as a string.
 const formatReporterName = (name) => {
   if (!name) return "";
   const trimmed = String(name).trim();
@@ -30,11 +30,10 @@ const formatReporterName = (name) => {
   return trimmed;
 };
 
-// Styled components (identical to Profile.js)
-
+// Styled components
 const Container = styled.div`
   display: flex;
-  min-height: calc(100vh - 70px); /* Adjusting for header height */
+  min-height: calc(100vh - 70px);
   background-color: #f5f6f8;
 `;
 
@@ -60,7 +59,7 @@ const Content = styled.div`
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 
   @media (max-width: 768px) {
-    margin-left: 60px; /* For collapsed sidebar on smaller screens */
+    margin-left: 60px;
     padding: 20px;
   }
 `;
@@ -155,11 +154,10 @@ const Button = styled.button`
   }
 `;
 
-// StatusCardGroup: On very small screens, constrain the max-width and left-align the cards.
 const StatusCardGroup = styled.div`
   display: flex;
   justify-content: center;
-  margin-bottom: 15px; /* reduced spacing */
+  margin-bottom: 15px;
   width: 100%;
   flex-wrap: wrap;
 
@@ -176,44 +174,28 @@ const StatusCardContainer = styled.div`
   justify-content: center;
   gap: 10px;
   margin: 10px 0;
-  border-radius: 10px;
-  border: 1px solid #666;
 `;
 
 const StatusCard = styled.div`
-  background-color: #ffffff;
-  color: #000;
+  background-color: ${(props) => (props.active ? props.color : "#ffffff")};
+  color: ${(props) => (props.active ? "#ffffff" : "#000")};
   width: 130px;
-  border-right: 1px solid #666;
+  border-radius: 10px;
+  border: 1px solid ${(props) => props.color};
   padding: 20px;
   text-align: center;
   font-size: 18px;
   font-weight: bold;
-  border-radius: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   transition: all 0.3s ease;
 
   &:hover {
     transform: scale(1.05);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  &:last-child {
-    border-right: none;
-  }
-
-  @media (max-width: 768px) {
-    width: 120px;
-    border-right: none;
-  }
-
-  @media (max-width: 480px) {
-    width: 80px;
-    padding: 10px;
-    font-size: 14px;
   }
 `;
 
@@ -252,6 +234,14 @@ const TableHeader = styled.th`
   position: sticky;
   top: 0;
   z-index: 10000;
+
+  & > input {
+    margin-top: 5px;
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
 `;
 
 const TableData = styled.td`
@@ -406,32 +396,40 @@ const DepartmentDashboard = () => {
   const navigate = useNavigate();
   const [userData, setUserData] = useState({});
   const [tickets, setTickets] = useState([]);
-  const [filteredTickets, setFilteredTickets] = useState([]); // To store filtered tickets
-  const [searchTerm, setSearchTerm] = useState(""); // To store search input
-  const [statusCounts, setStatusCounts] = useState({});
-  const [viewMode, setViewMode] = useState("assignedByDept");
   const [statusDataState, setStatusDataState] = useState([]);
+  const [viewMode, setViewMode] = useState("assignedByDept");
 
-  // sorting + date filters
+  // Sorting, status-card filter, global search, date filters, column filters
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [statusFilter, setStatusFilter] = useState("total");
+  const [searchTerm, setSearchTerm] = useState("");
   const [creationDateFilter, setCreationDateFilter] = useState("");
   const [deadlineDateFilter, setDeadlineDateFilter] = useState("");
+  const [columnFilters, setColumnFilters] = useState({
+    Ticket_Number: "",
+    Creation_Date: "",
+    Ticket_Title: "",
+    Ticket_Priority: "",
+    Reporter_Name: "",
+    Assignee_Name: "",
+    Expected_Completion_Date: "",
+    TStatus: ""
+  });
 
-  // Editable fields (if any modal is used)
-  const [updatedStatus, setUpdatedStatus] = useState("");
-  const [updatedAssigneeDept, setUpdatedAssigneeDept] = useState("");
-  const [updatedAssigneeSubDept, setUpdatedAssigneeSubDept] = useState("");
-  const [updatedAssigneeEmpID, setUpdatedAssigneeEmpID] = useState("");
-  // Dropdown options (if any modal is used)
-  const [assigneeDepts, setAssigneeDepts] = useState([]);
-  const [assigneeSubDepts, setAssigneeSubDepts] = useState([]);
-  const [assigneeEmpIDs, setAssigneeEmpIDs] = useState([]);
-  // Modal state (if any)
+  // Editable/modal state (if needed)
   const [showModal, setShowModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [updatedExpectedDate, setUpdatedExpectedDate] = useState("");
   const [updatedPriority, setUpdatedPriority] = useState("");
+  const [updatedStatus, setUpdatedStatus] = useState("");
+  const [updatedAssigneeDept, setUpdatedAssigneeDept] = useState("");
+  const [updatedAssigneeSubDept, setUpdatedAssigneeSubDept] = useState("");
+  const [updatedAssigneeEmpID, setUpdatedAssigneeEmpID] = useState("");
+  const [assigneeDepts, setAssigneeDepts] = useState([]);
+  const [assigneeSubDepts, setAssigneeSubDepts] = useState([]);
+  const [assigneeEmpIDs, setAssigneeEmpIDs] = useState([]);
 
+  // Fetch user & tickets
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -440,307 +438,406 @@ const DepartmentDashboard = () => {
           navigate("/login");
           return;
         }
-        // Fetch user data
-        const userResponse = await axios.get(`${API_BASE_URL}/api/user`, {
-          params: { email: storedUsername },
+        const u = await axios.get(`${API_BASE_URL}/api/user`, {
+          params: { email: storedUsername }
         });
-        setUserData(userResponse.data);
-        // For department dashboard, fetch tickets using the user's department
-        fetchTickets("assignedByDept", userResponse.data.Dept);
-      } catch (error) {
-        console.error("Error fetching user data:", error);
+        setUserData(u.data);
+        fetchTickets("assignedByDept", u.data.Dept);
+      } catch (e) {
+        console.error(e);
         navigate("/login");
       }
     };
     fetchData();
   }, [navigate]);
 
+  // Fetch tickets + status counts
   const fetchTickets = async (mode, department) => {
     try {
-      // 1. Fetch tickets + counts
-      const response = await axios.get(`${API_BASE_URL}/api/tickets`, {
-        params: { mode, department },
+      const r = await axios.get(`${API_BASE_URL}/api/tickets`, {
+        params: { mode, department }
       });
+      const d = r.data || {};
+      const tix = d.tickets || [];
+      setTickets(tix);
 
-      const tickets = response.data.tickets || [];
-      const currentCounts = response.data.statusCounts || {};
-      const previousCounts = response.data.previousStatusCounts || {};
-
-      // 2. Store tickets
-      setTickets(tickets);
-      setFilteredTickets(tickets);
-
-      // 3. Build status template
-      const statusTemplate = [
+      // assemble status cards
+      const current = d.statusCounts || {};
+      const previous = d.previousStatusCounts || {};
+      const template = [
         { key: "total", title: "Total", color: "#FF6F61" },
         { key: "unassigned", title: "Unassigned", color: "#FBC02D" },
         { key: "inProgress", title: "In‑Progress", color: "#4CAF50" },
         { key: "overdue", title: "Overdue", color: "#E53935" },
         { key: "resolved", title: "Resolved", color: "#1E88E5" },
-        { key: "closed", title: "Closed", color: "#8E24AA" },
+        { key: "closed", title: "Closed", color: "#8E24AA" }
       ];
-
-      // 4. Compute todayCount = current – previous (never negative)
-      const updatedStatusData = statusTemplate.map((s) => {
-        const count = currentCounts[s.key] || 0;
-        const prev = previousCounts[s.key] || 0;
-        const todayCount = Math.max(0, count - prev);
-        return { ...s, count, todayCount };
+      const cards = template.map((s) => {
+        const now = current[s.key] || 0;
+        const prev = previous[s.key] || 0;
+        return { ...s, count: now, todayCount: Math.max(0, now - prev) };
       });
-
-      // 5. Update state
-      setStatusDataState(updatedStatusData);
-    } catch (error) {
-      console.error("Error fetching tickets:", error);
+      setStatusDataState(cards);
+    } catch (e) {
+      console.error(e);
       setTickets([]);
-      setFilteredTickets([]);
       setStatusDataState([]);
     }
   };
 
-  const handleCreateTicket = () => {
-    navigate("/ticket");
+  const handleCreateTicket = () => navigate("/ticket");
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    fetchTickets(mode, userData.Dept);
+    setStatusFilter("total");
+    setSearchTerm("");
+    setCreationDateFilter("");
+    setDeadlineDateFilter("");
+    setColumnFilters({
+      Ticket_Number: "",
+      Creation_Date: "",
+      Ticket_Title: "",
+      Ticket_Priority: "",
+      Reporter_Name: "",
+      Assignee_Name: "",
+      Expected_Completion_Date: "",
+      TStatus: ""
+    });
   };
 
-  // sort handler
+  // Sorting handler
   const handleSort = (key) => {
-    setSortConfig((sc) =>
-      sc.key === key
-        ? { key, direction: sc.direction === "asc" ? "desc" : "asc" }
+    setSortConfig((prev) =>
+      prev.key === key
+        ? { key, direction: prev.direction === "asc" ? "desc" : "asc" }
         : { key, direction: "asc" }
     );
   };
 
-  // combined filter+sort
-  const filteredAndSorted = useMemo(() => {
-    let data = tickets;
+  // Column filter handler
+  const handleColumnFilterChange = (column, value) => {
+    setColumnFilters((prev) => ({ ...prev, [column]: value }));
+  };
 
+  // Combined status, global search, column filters, date filters, sorting
+  const filteredAndSorted = useMemo(() => {
+    let data = [...tickets];
+
+    // status-card filtering
+    if (statusFilter !== "total") {
+      data = data.filter((t) => {
+        switch (statusFilter) {
+          case "unassigned":
+            return !t.Expected_Completion_Date;
+          case "inProgress":
+            return t.TStatus === "In-Progress";
+          case "resolved":
+            return t.TStatus === "Resolved";
+          case "closed":
+            return t.TStatus === "Closed";
+          case "overdue": {
+            if (!t.Expected_Completion_Date) return false;
+            const today = new Date().setHours(0,0,0,0);
+            const exp = new Date(t.Expected_Completion_Date).setHours(0,0,0,0);
+            return exp < today && !["Resolved","Closed"].includes(t.TStatus);
+          }
+          default:
+            return true;
+        }
+      });
+    }
+
+    // global search
     if (searchTerm) {
-      const t = searchTerm.toLowerCase();
-      data = data.filter((ti) =>
-        Object.values(ti).some((v) => ("" + v).toLowerCase().includes(t))
+      const st = searchTerm.toLowerCase();
+      data = data.filter((t) =>
+        Object.values(t).some((v) =>
+          String(v || "").toLowerCase().includes(st)
+        )
       );
     }
+
+    // per-column filters
+    data = data.filter((t) =>
+      Object.entries(columnFilters).every(([col, val]) => {
+        if (!val) return true;
+        let fieldValue = "";
+        if (col === "Creation_Date" || col === "Expected_Completion_Date") {
+          fieldValue = t[col]
+            ? new Date(t[col]).toISOString().slice(0,10)
+            : "";
+        } else if (col === "Reporter_Name") {
+          fieldValue = t.Reporter_Name || "";
+        } else if (col === "Assignee_Name") {
+          fieldValue = t.Assignee_Name || "";
+        } else {
+          fieldValue = t[col] != null ? String(t[col]) : "";
+        }
+        return fieldValue.toLowerCase().includes(val.toLowerCase());
+      })
+    );
+
+    // date filters
     if (creationDateFilter) {
-      data = data.filter(
-        (ti) =>
-          ti.Creation_Date &&
-          new Date(ti.Creation_Date).toISOString().slice(0, 10) ===
-            creationDateFilter
+      data = data.filter((t) =>
+        t.Creation_Date &&
+        new Date(t.Creation_Date).toISOString().slice(0,10) ===
+          creationDateFilter
       );
     }
     if (deadlineDateFilter) {
-      data = data.filter(
-        (ti) =>
-          ti.Expected_Completion_Date &&
-          new Date(ti.Expected_Completion_Date).toISOString().slice(0, 10) ===
-            deadlineDateFilter
+      data = data.filter((t) =>
+        t.Expected_Completion_Date &&
+        new Date(t.Expected_Completion_Date).toISOString().slice(0,10) ===
+          deadlineDateFilter
       );
     }
+
+    // sorting
     if (sortConfig.key) {
-      data = [...data].sort((a, b) => {
-        let aV = a[sortConfig.key],
-          bV = b[sortConfig.key];
-        if (!aV) return 1;
-        if (!bV) return -1;
-        aV = new Date(aV).getTime();
-        bV = new Date(bV).getTime();
-        return sortConfig.direction === "asc" ? aV - bV : bV - aV;
+      data.sort((a, b) => {
+        let aVal = a[sortConfig.key], bVal = b[sortConfig.key];
+        // date sort?
+        const da = Date.parse(aVal);
+        const db = Date.parse(bVal);
+        if (!isNaN(da) && !isNaN(db)) {
+          return sortConfig.direction === "asc" ? da - db : db - da;
+        }
+        aVal = aVal != null ? String(aVal).toLowerCase() : "";
+        bVal = bVal != null ? String(bVal).toLowerCase() : "";
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
       });
     }
+
     return data;
-  }, [tickets, searchTerm, creationDateFilter, deadlineDateFilter, sortConfig]);
+  }, [
+    tickets,
+    statusFilter,
+    searchTerm,
+    columnFilters,
+    creationDateFilter,
+    deadlineDateFilter,
+    sortConfig
+  ]);
 
-  const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    // For department tickets, always use the user's department.
-    fetchTickets(mode, userData.Dept);
+  // Navigate to ticket detail
+  const handleRowClick = (t) => {
+    const fullEmail = `${localStorage.getItem("username")}@premierenergies.com`;
+    navigate(`/ticket/${t.Ticket_Number}`, { state: { ticket: t, emailUser: fullEmail } });
   };
-
-  const handleActionClick = (ticket) => {
-    const storedUsername = localStorage.getItem("username");
-    const fullEmailUser = `${storedUsername}@premierenergies.com`;
-    navigate(`/ticket/${ticket.Ticket_Number}`, {
-      state: { ticket, emailUser: fullEmailUser },
-    });
-  };
-
-  useEffect(() => {
-    setFilteredTickets(tickets);
-  }, [tickets]);
 
   return (
-    <div>
-      <Container>
-        <Sidebar activeTab="Department" />
-        <Content>
-          <CreateTicketButton onClick={handleCreateTicket}>
-            Create Ticket
-          </CreateTicketButton>
-          <WelcomeText>Welcome Back {userData.EmpName}!</WelcomeText>
-          <EmployeeDetails>
-            Employee ID: {userData.EmpID}
-            <br />
-            Department: {userData.Dept}
-            <br />
-            Location: {userData.EmpLocation}
-          </EmployeeDetails>
-          <StatusCardGroup>
-            <StatusCardContainer>
-              {statusDataState.map((status, index) => (
-                <StatusCard key={index} color={status.color}>
-                  <StatusTitle>{status.title}</StatusTitle>
-                  <StatusCount>{status.count || 0}</StatusCount>
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      color: "#777",
-                      marginTop: "5px",
-                    }}
-                  >
-                    {status.todayCount} new today
-                  </div>
-                </StatusCard>
-              ))}
-            </StatusCardContainer>
-          </StatusCardGroup>
-          <ButtonGroup>
-            <SearchBar>
-              <SearchIcon />
-              <SearchInput
-                type="text"
-                placeholder="Search Department Tickets"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </SearchBar>
-            <Button
-              active={viewMode === "assignedByDept"}
-              onClick={() => handleViewModeChange("assignedByDept")}
-            >
-              Created by Department
-            </Button>
-            <Button
-              active={viewMode === "assignedToDept"}
-              onClick={() => handleViewModeChange("assignedToDept")}
-            >
-              Assigned to Department
-            </Button>
-          </ButtonGroup>
-          <Table>
-            <thead>
-              <tr>
-                <TableHeader>Ticket Number</TableHeader>
-                {/* Creation Date with sort & filter */}
-                <TableHeader onClick={() => handleSort("Creation_Date")}>
-                  Creation Date{" "}
-                  {sortConfig.key === "Creation_Date"
-                    ? sortConfig.direction === "asc"
-                      ? "↑"
-                      : "↓"
-                    : ""}
-                  <br />
-                  <Input
-                    type="date"
-                    value={creationDateFilter}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => setCreationDateFilter(e.target.value)}
-                    style={{ fontSize: 12, marginTop: 4 }}
-                  />
-                </TableHeader>
-                <TableHeader>Ticket Title</TableHeader>
-                <TableHeader>Priority</TableHeader>
-                <TableHeader>
-                  {viewMode === "assignedToDept" ? "Assigned By" : "Created By"}
-                </TableHeader>
-                <TableHeader>Assignee</TableHeader>
-                {/* Deadline with sort & filter */}
-                <TableHeader
-                  onClick={() => handleSort("Expected_Completion_Date")}
-                >
-                  Deadline{" "}
-                  {sortConfig.key === "Expected_Completion_Date"
-                    ? sortConfig.direction === "asc"
-                      ? "↑"
-                      : "↓"
-                    : ""}
-                  <br />
-                  <Input
-                    type="date"
-                    value={deadlineDateFilter}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => setDeadlineDateFilter(e.target.value)}
-                    style={{ fontSize: 12, marginTop: 4 }}
-                  />
-                </TableHeader>
-                <TableHeader>Status</TableHeader>
-                <TableHeader>Action</TableHeader>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAndSorted.map((t) => (
-                <tr
-                  key={t.Ticket_Number}
-                  onClick={() =>
-                    navigate(`/ticket/${t.Ticket_Number}`, {
-                      state: {
-                        ticket: t,
-                        emailUser: `${localStorage.getItem(
-                          "username"
-                        )}@premierenergies.com`,
-                      },
-                    })
-                  }
-                >
-                  <TableData>{t.Ticket_Number}</TableData>
-                  <TableData>
-                    {t.Creation_Date
-                      ? new Date(t.Creation_Date).toISOString().split("T")[0]
-                      : "N/A"}
-                  </TableData>
-                  <TableData>{t.Ticket_Title}</TableData>
-                  <TableData>{t.Ticket_Priority}</TableData>
-                  <TableData>
-                    {viewMode === "assignedToDept"
-                      ? formatReporterName(t.Reporter_Name)
-                      : t.Assignee_Name}
-                  </TableData>
-                  <TableData>{t.Assignee_Name}</TableData>
-                  {/* 6. Deadline */}
-                  <TableData>
-                    {t.TStatus === "Closed" || t.TStatus === "Resolved"
-                      ? "Closed"
-                      : t.Expected_Completion_Date
-                      ? (() => {
-                          const ed = new Date(t.Expected_Completion_Date);
-                          const today = new Date();
-                          ed.setHours(0, 0, 0, 0);
-                          today.setHours(0, 0, 0, 0);
-                          const diff = Math.ceil(
-                            (ed - today) / (1000 * 60 * 60 * 24)
-                          );
-                          if (diff > 0)
-                            return `In ${diff} day${diff !== 1 ? "s" : ""}`;
-                          if (diff === 0) return "Today";
-                          return `Overdue by ${Math.abs(diff)} day${
-                            Math.abs(diff) !== 1 ? "s" : ""
-                          }`;
-                        })()
-                      : "N/A"}
-                  </TableData>
+    <Container>
+      <Sidebar activeTab="Department" />
+      <Content>
+        <CreateTicketButton onClick={handleCreateTicket}>
+          Create Ticket
+        </CreateTicketButton>
+        <WelcomeText>Welcome Back {userData.EmpName}!</WelcomeText>
+        <EmployeeDetails>
+          Employee ID: {userData.EmpID}<br/>
+          Department: {userData.Dept}<br/>
+          Location: {userData.EmpLocation}
+        </EmployeeDetails>
 
-                  {/* 7. Status */}
-                  <TableData>{t.TStatus}</TableData>
-                  <TableData>
-                    <ActionIcon />
-                  </TableData>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </Content>
-      </Container>
-    </div>
+        <StatusCardGroup>
+          <StatusCardContainer>
+            {statusDataState.map((s) => (
+              <StatusCard
+                key={s.key}
+                color={s.color}
+                active={statusFilter === s.key}
+                onClick={() => setStatusFilter(s.key)}
+              >
+                <StatusTitle>{s.title}</StatusTitle>
+                <StatusCount>{s.count}</StatusCount>
+                <PercentageChange isIncrease={s.todayCount >= 0}>
+                  {s.todayCount} new today
+                </PercentageChange>
+              </StatusCard>
+            ))}
+          </StatusCardContainer>
+        </StatusCardGroup>
+
+        <ButtonGroup>
+          <SearchBar>
+            <SearchIcon />
+            <SearchInput
+              type="text"
+              placeholder="Global Search…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </SearchBar>
+          <Button
+            active={viewMode === "assignedByDept"}
+            onClick={() => handleViewModeChange("assignedByDept")}
+          >
+            Created by Department
+          </Button>
+          <Button
+            active={viewMode === "assignedToDept"}
+            onClick={() => handleViewModeChange("assignedToDept")}
+          >
+            Assigned to Department
+          </Button>
+        </ButtonGroup>
+
+        <Table>
+          <thead>
+            <tr>
+              <TableHeader onClick={() => handleSort("Ticket_Number")}>
+                Ticket# {sortConfig.key === "Ticket_Number" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                <input
+                  type="text"
+                  placeholder="Filter Ticket#"
+                  value={columnFilters.Ticket_Number}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Ticket_Number", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader onClick={() => handleSort("Creation_Date")}>
+                Creation Date {sortConfig.key === "Creation_Date" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                <input
+                  type="date"
+                  value={columnFilters.Creation_Date}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Creation_Date", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader onClick={() => handleSort("Ticket_Title")}>
+                Title {sortConfig.key === "Ticket_Title" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                <input
+                  type="text"
+                  placeholder="Filter Title"
+                  value={columnFilters.Ticket_Title}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Ticket_Title", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader onClick={() => handleSort("Ticket_Priority")}>
+                Priority {sortConfig.key === "Ticket_Priority" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                <input
+                  type="text"
+                  placeholder="Filter Priority"
+                  value={columnFilters.Ticket_Priority}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Ticket_Priority", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader>
+                {viewMode === "assignedToDept" ? "Assigned By" : "Created By"}
+                <input
+                  type="text"
+                  placeholder="Filter Reporter"
+                  value={columnFilters.Reporter_Name}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Reporter_Name", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader>
+                Assignee
+                <input
+                  type="text"
+                  placeholder="Filter Assignee"
+                  value={columnFilters.Assignee_Name}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Assignee_Name", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader onClick={() => handleSort("Expected_Completion_Date")}>
+                Deadline {sortConfig.key === "Expected_Completion_Date" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                <input
+                  type="date"
+                  value={columnFilters.Expected_Completion_Date}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("Expected_Completion_Date", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader onClick={() => handleSort("TStatus")}>
+                Status {sortConfig.key === "TStatus" ? (sortConfig.direction==="asc"?<FaArrowUp/>:<FaArrowDown/>) : null}
+                <input
+                  type="text"
+                  placeholder="Filter Status"
+                  value={columnFilters.TStatus}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleColumnFilterChange("TStatus", e.target.value)}
+                />
+              </TableHeader>
+
+              <TableHeader>Action</TableHeader>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredAndSorted.map((t) => (
+              <tr key={t.Ticket_Number} onClick={() => handleRowClick(t)}>
+                <TableData>{t.Ticket_Number}</TableData>
+                <TableData>
+                  {t.Creation_Date
+                    ? new Date(t.Creation_Date).toISOString().split("T")[0]
+                    : "N/A"}
+                </TableData>
+                <TableData>{t.Ticket_Title}</TableData>
+                <TableData>{t.Ticket_Priority}</TableData>
+                <TableData>
+                  {viewMode === "assignedToDept"
+                    ? formatReporterName(t.Reporter_Name)
+                    : t.Assignee_Name}
+                </TableData>
+                <TableData>{t.Assignee_Name}</TableData>
+                <TableData>
+                  {t.TStatus === "Closed" || t.TStatus === "Resolved"
+                    ? "Closed"
+                    : t.Expected_Completion_Date
+                    ? (() => {
+                        const ed = new Date(t.Expected_Completion_Date).setHours(0,0,0,0);
+                        const today = new Date().setHours(0,0,0,0);
+                        const diff = Math.ceil((ed - today) / (1000*60*60*24));
+                        if (diff > 0) return `In ${diff} day${diff!==1?"s":""}`;
+                        if (diff === 0) return "Today";
+                        return `Overdue by ${Math.abs(diff)} day${Math.abs(diff)!==1?"s":""}`;
+                      })()
+                    : "N/A"}
+                </TableData>
+                <TableData>{t.TStatus}</TableData>
+                <TableData><ActionIcon /></TableData>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+
+        {showModal && selectedTicket && (
+          <ModalOverlay>
+            <ModalContent>
+              <ModalHeader>
+                <h2>Ticket Details</h2>
+                <CloseButton onClick={() => setShowModal(false)}>×</CloseButton>
+              </ModalHeader>
+              <ModalBody>
+                <DetailRow>
+                  <strong>Ticket#: </strong>{selectedTicket.Ticket_Number}
+                </DetailRow>
+                {/* ...additional detail rows and form fields here... */}
+              </ModalBody>
+              <ModalFooter>
+                <SubmitButton onClick={() => {/* submit logic */}}>Submit</SubmitButton>
+                <CancelButton onClick={() => setShowModal(false)}>Cancel</CancelButton>
+              </ModalFooter>
+            </ModalContent>
+          </ModalOverlay>
+        )}
+      </Content>
+    </Container>
   );
 };
 

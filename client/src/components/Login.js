@@ -152,7 +152,8 @@ const ErrorMessage = styled.p`
 export default function Login() {
   const navigate = useNavigate();
   const [emailUser, setEmailUser] = useState("");
-  const [password, setPassword] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   // if we already have an empID, skip straight in
@@ -185,28 +186,41 @@ export default function Login() {
     setEmailUser(e.target.value.split("@")[0]);
   };
 
-  const handleSubmit = async (e) => {
+  // Step 1: Request OTP
+  const sendOtp = async (e) => {
+    e.preventDefault();
+    setErrorMessage("");
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/send-otp`,
+        { email: emailUser },
+        { headers: { "Content-Type": "application/json" } }
+      );
+      setOtpSent(true);
+    } catch (err) {
+      setErrorMessage(err.response?.data?.message || "Unable to send OTP");
+      console.error(err);
+    }
+  };
+
+  // Step 2: Verify OTP
+  const verifyOtp = async (e) => {
     e.preventDefault();
     setErrorMessage("");
     try {
       const resp = await axios.post(
-        `${API_BASE_URL}/api/login`,
-        { email: emailUser, password },
+        `${API_BASE_URL}/api/verify-otp`,
+        { email: emailUser, otp },
         { headers: { "Content-Type": "application/json" } }
       );
       localStorage.setItem("username", emailUser);
       localStorage.setItem("empID", resp.data.empID);
       navigate("/profile");
     } catch (err) {
-      if (err.response?.status === 401) {
-        setErrorMessage("Invalid username or password");
-      } else {
-        setErrorMessage("An error occurred. Please try again.");
-        console.error(err);
-      }
+      setErrorMessage(err.response?.data?.message || "Invalid or expired OTP");
+      console.error(err);
     }
   };
-
   return (
     <Container>
       <Content>
@@ -216,8 +230,8 @@ export default function Login() {
           </Video>
         </LeftHalf>
         <RightHalf>
-          <Heading>Welcome Back!</Heading>
-          <Form onSubmit={handleSubmit}>
+          <Heading>Welcome!</Heading>
+          <Form onSubmit={otpSent ? verifyOtp : sendOtp}>
             <Label htmlFor="username">Username</Label>
             <EmailInputContainer>
               <EmailInput
@@ -230,21 +244,28 @@ export default function Login() {
               />
               <FixedText>@premierenergies.com</FixedText>
             </EmailInputContainer>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              type="password"
-              id="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            {otpSent && (
+              <>
+                <Label htmlFor="otp">Enter OTP</Label>
+                <Input
+                  type="text"
+                  id="otp"
+                  placeholder="4‑digit code"
+                  maxLength={4}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  required
+                />
+              </>
+            )}
             {errorMessage && <ErrorMessage>{errorMessage}</ErrorMessage>}
-            <SubmitButton type="submit">Submit</SubmitButton>
+            {!otpSent ? (
+              <SubmitButton type="submit">Send OTP</SubmitButton>
+            ) : (
+              <SubmitButton type="submit">Verify OTP</SubmitButton>
+            )}
           </Form>
-          <ForgotPassword onClick={handleForgotPassword}>
-            Forgot Password?
-          </ForgotPassword>
+
         </RightHalf>
       </Content>
     </Container>

@@ -10,7 +10,7 @@ const API_BASE_URL = window.location.origin;
 // Updated Container: flex-direction is now always row.
 const Container = styled.div`
   display: flex;
-  min-height: calc(100vh - 70px); /* Adjust for header height */
+  min-height: calc(100vh - 70px);
   background: linear-gradient(to bottom right, #f0f4f8, #d9e2ec);
 `;
 
@@ -26,6 +26,7 @@ const TitleInput = styled.input`
     width: 80%;
   }
 `;
+
 const FieldHeader = styled.h3`
   width: 100%;
   font-size: 18px;
@@ -145,7 +146,6 @@ const SubmitButton = styled.button`
   margin-top: 20px;
 `;
 
-// reuse for error messages
 const Message = styled.p`
   color: red;
   text-align: center;
@@ -153,7 +153,6 @@ const Message = styled.p`
   margin-top: 20px;
 `;
 
-// new modal overlay
 const ConfirmationOverlay = styled.div`
   position: fixed;
   inset: 0;
@@ -189,28 +188,33 @@ const CreateTicketPage = () => {
   const [subTasks, setSubTasks] = useState([]);
   const [taskLabels, setTaskLabels] = useState([]);
 
+  // fixed IT department/sub-dept for IT Org
   const [selectedDepartment] = useState("IT");
   const [selectedSubDepartment] = useState("IT");
   const [selectedSubTask, setSelectedSubTask] = useState("");
   const [selectedTaskLabel, setSelectedTaskLabel] = useState("");
 
   const [ticketTitle, setTicketTitle] = useState("");
-
   const [incidentDate, setIncidentDate] = useState("");
   const [incidentTime, setIncidentTime] = useState("");
 
-  const [ticketUrgency, setTicketUrgency] = useState(""); // renamed
+  const [ticketUrgency, setTicketUrgency] = useState("");
   const [urgencyDefs] = useState({
-    High: "Affects core business operations, a critical service is completely down, or a large number of users are unable to perform their essential functions.",
-    Medium: "A critical component or service is severely degraded, affecting a significant number of users or a key business function.",
-    Low: "Affects an individual user or a smaller group of users, or a non-critical function of a system is impaired. Allows operations to continue, but with some inconvenience or reduced efficiency.",
+    High:
+      "Affects core business operations, a critical service is completely down, or a large number of users are unable to perform their essential functions.",
+    Medium:
+      "A critical component or service is severely degraded, affecting a significant number of users or a key business function.",
+    Low:
+      "Affects an individual user or a smaller group of users, or a non-critical function of a system is impaired. Allows operations to continue, but with some inconvenience or reduced efficiency.",
   });
-  const [locations, setLocations] = useState([]); // new
+
+  // Companies & Locations
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompany, setSelectedCompany] = useState("");
+  const [spotLocations, setSpotLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState("");
 
   const [ticketDescription, setTicketDescription] = useState("");
-
-  // new state for "on behalf"
   const [assignees, setAssignees] = useState([]);
   const [createdForEmail, setCreatedForEmail] = useState("");
   const [isAssigneeUser, setIsAssigneeUser] = useState(false);
@@ -225,189 +229,180 @@ const CreateTicketPage = () => {
   const [attachments, setAttachments] = useState(null);
   const navigate = useNavigate();
 
+  // Auth check & "created for"
   useEffect(() => {
-    const storedUsername = localStorage.getItem("username");
-    if (!storedUsername) {
+    const stored = localStorage.getItem("username");
+    if (!stored) {
       navigate("/login");
       return;
     }
-    setReporterEmail(storedUsername);
+    setReporterEmail(stored);
 
-    // check if current user can create on behalf
     axios
-      .get(`${API_BASE_URL}/api/user?email=${storedUsername}`)
-      .then((res) =>
-        axios.get(`${API_BASE_URL}/api/isAssignee?empID=${res.data.EmpID}`)
+      .get(`${API_BASE_URL}/api/user`, { params: { email: stored } })
+      .then((r) =>
+        axios.get(`${API_BASE_URL}/api/isAssignee`, {
+          params: { empID: r.data.EmpID },
+        })
       )
-      .then((res) => {
-        setIsAssigneeUser(res.data.isAssignee);
-        if (res.data.isAssignee) {
+      .then((r) => {
+        setIsAssigneeUser(r.data.isAssignee);
+        if (r.data.isAssignee) {
           axios
             .get(`${API_BASE_URL}/api/assignees`)
-            .then((r) => setAssignees(r.data))
-            .catch((err) => console.error("Error fetching assignees:", err));
+            .then((x) => setAssignees(x.data))
+            .catch(() => {});
         }
       })
-      .catch((err) => console.error("Auth check failed:", err));
+      .catch(() => {});
   }, [navigate]);
 
-  // fetch matching usernames, debounced
+  // Debounced user search
   const fetchUserSuggestions = debounce((q) => {
-    if (!q) return setUserSuggestions([]);
+    if (!q) {
+      setUserSuggestions([]);
+      return;
+    }
     axios
       .get(`${API_BASE_URL}/api/search-employees`, { params: { q } })
-      .then((res) => setUserSuggestions(res.data))
+      .then((r) => setUserSuggestions(r.data))
       .catch(() => setUserSuggestions([]));
   }, 300);
 
-  // Fetch departments on component mount
+  // Load static dropdowns
   useEffect(() => {
     axios
       .get(`${API_BASE_URL}/api/departments`)
-      .then((response) => {
-        setDepartments(response.data);
-      })
-      .catch((error) => {
-        console.error("Error fetching departments:", error);
-      });
+      .then((r) => setDepartments(r.data))
+      .catch(() => {});
   }, []);
 
-  // Fetch subdepartments when department changes
   useEffect(() => {
-    if (selectedDepartment) {
-      axios
-        .get(
-          `${API_BASE_URL}/api/subdepartments?department=${selectedDepartment}`
-        )
-        .then((response) => {
-          setSubDepartments(response.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching subdepartments:", error);
-        });
-    } else {
+    if (!selectedDepartment) {
       setSubDepartments([]);
+      return;
     }
-    // Reset dependent fields
+    axios
+      .get(`${API_BASE_URL}/api/subdepartments`, {
+        params: { department: selectedDepartment },
+      })
+      .then((r) => setSubDepartments(r.data))
+      .catch(() => {});
     setSubTasks([]);
     setTaskLabels([]);
-
     setSelectedSubTask("");
     setSelectedTaskLabel("");
   }, [selectedDepartment]);
 
-  // Fetch subtasks when subdepartment changes
   useEffect(() => {
-    if (selectedDepartment && selectedSubDepartment) {
-      axios
-        .get(
-          `${API_BASE_URL}/api/subtasks?department=${selectedDepartment}&subdepartment=${selectedSubDepartment}`
-        )
-        .then((response) => {
-          setSubTasks(response.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching subtasks:", error);
-        });
-    } else {
+    if (!selectedSubDepartment) {
       setSubTasks([]);
+      return;
     }
-    // Reset dependent fields
+    axios
+      .get(`${API_BASE_URL}/api/subtasks`, {
+        params: {
+          department: selectedDepartment,
+          subdepartment: selectedSubDepartment,
+        },
+      })
+      .then((r) => setSubTasks(r.data))
+      .catch(() => {});
     setTaskLabels([]);
     setSelectedSubTask("");
     setSelectedTaskLabel("");
   }, [selectedSubDepartment, selectedDepartment]);
 
-  // Fetch task labels when subtask changes
   useEffect(() => {
-    if (selectedDepartment && selectedSubDepartment && selectedSubTask) {
-      axios
-        .get(
-          `${API_BASE_URL}/api/tasklabels?department=${selectedDepartment}&subdepartment=${selectedSubDepartment}&subtask=${selectedSubTask}`
-        )
-        .then((response) => {
-          setTaskLabels(response.data);
-        })
-        .catch((error) => {
-          console.error("Error fetching task labels:", error);
-        });
-    } else {
+    if (!selectedSubTask) {
       setTaskLabels([]);
+      return;
     }
+    axios
+      .get(`${API_BASE_URL}/api/tasklabels`, {
+        params: {
+          department: selectedDepartment,
+          subdepartment: selectedSubDepartment,
+          subtask: selectedSubTask,
+        },
+      })
+      .then((r) => setTaskLabels(r.data))
+      .catch(() => {});
     setSelectedTaskLabel("");
   }, [selectedSubTask, selectedSubDepartment, selectedDepartment]);
 
+  // Load companies
   useEffect(() => {
     axios
-      .get(`${API_BASE_URL}/api/locations`, {
-        params: { department: selectedDepartment },
-      })
-      .then((res) => setLocations(res.data))
-      .catch((err) => console.error("Error fetching locations:", err));
-  }, [selectedDepartment]);
+      .get(`${API_BASE_URL}/api/companies`)
+      .then((r) => setCompanies(r.data))
+      .catch(() => {});
+  }, []);
+
+  // Load locations for all companies
+  useEffect(() => {
+    axios
+      .get(`${API_BASE_URL}/api/spotLocations`)
+      .then((r) => setSpotLocations(r.data))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // Ensure reporterEmail is available
     if (!reporterEmail) {
       setErrorMessage("User not logged in. Please log in again.");
       return;
     }
 
-    // Create a FormData object and append all text fields
-    const formData = new FormData();
-    formData.append("title", ticketTitle);
-    formData.append("department", selectedDepartment);
-    formData.append("subDepartment", selectedSubDepartment);
-    formData.append("subTask", selectedSubTask);
-    formData.append("taskLabel", selectedTaskLabel);
-    formData.append("priority", ticketUrgency);
-    formData.append("description", ticketDescription);
-    formData.append("reporterEmail", reporterEmail);
-    formData.append("incidentReportedDate", incidentDate);
-    formData.append("incidentReportedTime", incidentTime);
+    const form = new FormData();
+    form.append("title", ticketTitle);
+    form.append("department", selectedDepartment);
+    form.append("subDepartment", selectedSubDepartment);
+    form.append("subTask", selectedSubTask);
+    form.append("taskLabel", selectedTaskLabel);
+    form.append("priority", ticketUrgency);
+    form.append("description", ticketDescription);
+    form.append("reporterEmail", reporterEmail);
+    form.append("incidentReportedDate", incidentDate);
+    form.append("incidentReportedTime", incidentTime);
+    form.append("companyCode", selectedCompany);
+    form.append("location", selectedLocation);
 
-    // attach createdForEmail if provided
     if (isAssigneeUser && createdForEmail) {
-      formData.append("createdForEmail", createdForEmail);
+      form.append("createdForEmail", createdForEmail);
     }
-
-    // Append each attachment if provided (allowing multiple files)
     if (attachments) {
-      for (let i = 0; i < attachments.length; i++) {
-        formData.append("attachments", attachments[i]);
-      }
+      Array.from(attachments).forEach((file) =>
+        form.append("attachments", file)
+      );
     }
 
     axios
-      .post(`${API_BASE_URL}/api/create-ticket`, formData)
-      .then((response) => {
+      .post(`${API_BASE_URL}/api/create-ticket`, form)
+      .then(() => {
         setSuccessMessage(
-          "Your ticket was created successfully and auto-assigned, please check your inbox for a confirmation email!"
+          "Your ticket was created successfully! Check your inbox."
         );
         setErrorMessage("");
-
-        // Clear form fields
+        // reset form
         setTicketTitle("");
-
         setSelectedSubTask("");
         setSelectedTaskLabel("");
         setTicketUrgency("");
         setTicketDescription("");
         setAttachments(null);
-
-        // Clear dependent fields
+        setSelectedCompany("");
+        setSelectedLocation("");
         setSubDepartments([]);
         setSubTasks([]);
         setTaskLabels([]);
+        setIncidentDate("");
+        setIncidentTime("");
+        setCreatedForEmail("");
       })
-      .catch((error) => {
-        setErrorMessage(
-          "An error occurred while creating the ticket. Please try again."
-        );
+      .catch(() => {
+        setErrorMessage("Failed to create ticket. Please try again.");
         setSuccessMessage("");
-        console.error("Error creating ticket:", error);
       });
   };
 
@@ -419,7 +414,6 @@ const CreateTicketPage = () => {
         <Subtitle>
           All fields are mandatory and must be filled before ticket submission
         </Subtitle>
-        {/* AUTO-CLOSE NOTE */}
         <p
           style={{
             textAlign: "center",
@@ -438,7 +432,7 @@ const CreateTicketPage = () => {
               <div style={{ position: "relative", width: "400px" }}>
                 <TitleInput
                   type="text"
-                  placeholder="Enter username (without @…)"
+                  placeholder="Enter username (without @…) "
                   value={createdForEmail}
                   onChange={(e) => {
                     setCreatedForEmail(e.target.value);
@@ -496,6 +490,22 @@ const CreateTicketPage = () => {
 
           <InputRow>
             <div style={{ flex: 1 }}>
+              <FieldHeader>Location:</FieldHeader>
+              <Select
+                required
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+              >
+                <option value="">Select Location</option>
+                {spotLocations.map((loc) => (
+                  <option key={loc.LocationID} value={loc.LocationName}>
+                    {loc.LocationName}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div style={{ flex: 1 }}>
               <FieldHeader>Category:</FieldHeader>
               <Select
                 required
@@ -503,15 +513,14 @@ const CreateTicketPage = () => {
                 onChange={(e) => setSelectedSubTask(e.target.value)}
               >
                 <option value="">Select category</option>
-                {(Array.isArray(subTasks) ? subTasks : []).map(
-                  (subTask, index) => (
-                    <option key={index} value={subTask}>
-                      {subTask}
-                    </option>
-                  )
-                )}
+                {subTasks.map((st, i) => (
+                  <option key={i} value={st}>
+                    {st}
+                  </option>
+                ))}
               </Select>
             </div>
+
             <div style={{ flex: 1 }}>
               <FieldHeader>Sub-Category:</FieldHeader>
               <Select
@@ -520,15 +529,16 @@ const CreateTicketPage = () => {
                 onChange={(e) => setSelectedTaskLabel(e.target.value)}
               >
                 <option value="">Select sub-category</option>
-                {(Array.isArray(taskLabels) ? taskLabels : []).map(
-                  (label, index) => (
-                    <option key={index} value={label}>
-                      {label}
-                    </option>
-                  )
-                )}
+                {taskLabels.map((tl, i) => (
+                  <option key={i} value={tl}>
+                    {tl}
+                  </option>
+                ))}
               </Select>
             </div>
+          </InputRow>
+
+          <InputRow>
             <div style={{ flex: 1 }}>
               <FieldHeader>Urgency:</FieldHeader>
               <Select
@@ -548,24 +558,6 @@ const CreateTicketPage = () => {
                   {urgencyDefs[ticketUrgency]}
                 </small>
               )}
-            </div>
-          </InputRow>
-
-          <InputRow>
-            <div style={{ flex: 1 }}>
-              <FieldHeader>Location:</FieldHeader>
-              <Select
-                required
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-              >
-                <option value="">Select location</option>
-                {locations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </Select>
             </div>
 
             <div style={{ flex: 1 }}>
@@ -608,8 +600,8 @@ const CreateTicketPage = () => {
 
           <SubmitButton type="submit">Create Ticket</SubmitButton>
         </Form>
-        {errorMessage && <Message>{errorMessage}</Message>}
 
+        {errorMessage && <Message>{errorMessage}</Message>}
         {successMessage && (
           <ConfirmationOverlay>
             <ConfirmationModal>
@@ -622,4 +614,5 @@ const CreateTicketPage = () => {
     </Container>
   );
 };
+
 export default CreateTicketPage;

@@ -17,13 +17,15 @@ import Dashboard from './components/Dashboard';
 import STicket from './components/STicket';
 import AssigneeMappings from './components/AssigneeMappings';
 import Companies from './components/Companies';
+import Cateogry from './components/Category';
+import Location from './components/LocationMaster';
 
 function App() {
   return (
     <Router>
       <Header />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -31,6 +33,8 @@ function App() {
         <Route path="/department" element={<Department />} />
         <Route path="/assignee-mappings" element={<AssigneeMappings />} />
         <Route path="/companies" element={<Companies />} />
+        <Route path="/category" element={<Cateogry />} />
+        <Route path="/locations" element={<Location />} />
         <Route path="/ticket" element={<Ticket />} />
         <Route path="/ticket/:ticketNumber" element={<STicket />} />
         <Route path="/faqs" element={<FAQs />} />

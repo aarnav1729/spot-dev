@@ -33,22 +33,7 @@ const IT_ORG = {
           title: "Engineer",
           children: [],
         },
-        // note: Madhav Sai moved under Kishore below
       ],
-    },
-    {
-      EmpID: "PEPPL0741",
-      EmpName: "Raj Kumar Nalli",
-      EmpEmail: "rajkumar.n@premierenergies.com",
-      title: "SAP Functional Consultant",
-      children: [],
-    },
-    {
-      EmpID: "PEPPL0874",
-      EmpName: "Aarnav Singh",
-      EmpEmail: "aarnav.singh@premierenergies.com",
-      title: "Senior Executive",
-      children: [],
     },
     {
       EmpID: "PSS1234",
@@ -66,6 +51,20 @@ const IT_ORG = {
       ],
     },
     {
+      EmpID: "PEPPL0741",
+      EmpName: "Raj Kumar Nalli",
+      EmpEmail: "rajkumar.n@premierenergies.com",
+      title: "SAP Functional Consultant",
+      children: [],
+    },
+    {
+      EmpID: "PEPPL0874",
+      EmpName: "Aarnav Singh",
+      EmpEmail: "aarnav.singh@premierenergies.com",
+      title: "Senior Executive",
+      children: [],
+    },
+    {
       EmpID: "PSS1396",
       EmpName: "Pulla Suneel Kumar",
       EmpEmail: "Suneel.p@premierenergies.com",
@@ -81,7 +80,6 @@ const Container = styled.div`
   background-color: #e8f5e9;
   overflow: auto;
 `;
-
 const Content = styled.div`
   flex: 1;
   padding: 20px;
@@ -91,7 +89,6 @@ const Content = styled.div`
   border-radius: 15px;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
 `;
-
 const Title = styled.h1`
   color: #0f6ab0;
   font-size: 36px;
@@ -100,26 +97,51 @@ const Title = styled.h1`
   font-weight: bold;
 `;
 
-// draw the vertical connector
-const TreeNode = styled.div`
+// Main chart wrapper, relative so SVG lines overlay correctly
+const Chart = styled.div`
   position: relative;
-  margin-left: ${({ level }) => level * 20}px;
-  padding-left: 20px;
+  width: 100%;
+  padding-bottom: 200px; /* give space for bottom row */
+`;
+const MiddleRow = styled.div`
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  margin-top: 80px; /* place managers below root */
+`;
+const BottomRow = styled.div`
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  position: absolute;
+  bottom: 0;
+`;
+const Column = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
 
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 50%;
-    left: 10px;
-    border-left: ${({ level }) =>
-      level > 0 ? "1px solid #ccc" : "none"};
-  }
+// SVG overlay for root → managers connectors
+const ConnectorSvg = styled.svg`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+`;
+
+// generic CSS connector for manager’s own reportees and bottom row
+const CssConnector = styled.div`
+  width: 2px;
+  height: ${({ length }) => length || "30px"};
+  background: #ccc;
+  margin: 0 auto;
 `;
 
 const TeamMemberCard = styled.div`
   position: relative;
-  display: inline-block;
   background: linear-gradient(135deg, #ffebee 0%, #e3f2fd 100%);
   border: 1px solid #e0e0e0;
   border-radius: 10px;
@@ -127,19 +149,8 @@ const TeamMemberCard = styled.div`
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
   text-align: center;
   white-space: nowrap;
-  margin-bottom: 10px;
   cursor: ${({ clickable }) => (clickable ? "pointer" : "default")};
   transition: transform 0.3s ease, box-shadow 0.3s ease;
-
-  /* horizontal connector */
-  &::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: -20px;
-    width: 20px;
-    border-top: 1px solid #ccc;
-  }
 
   &:hover {
     ${({ clickable }) =>
@@ -149,27 +160,36 @@ const TeamMemberCard = styled.div`
       box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
     `}
   }
-`;
 
+  /* bottom-row items: draw horizontal line up from top center */
+  &.bottom::before {
+    content: "";
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1px;
+    height: 30px;
+    background: #ccc;
+  }
+`;
 const TeamMemberName = styled.h3`
   color: #d32f2f;
   font-size: 18px;
   margin: 0 0 4px;
 `;
-
 const TeamMemberDetails = styled.p`
   color: #388e3c;
   font-size: 12px;
   margin: 0;
 `;
-
 const TicketCount = styled.div`
   font-size: 12px;
   margin-top: 4px;
   color: #555;
 `;
 
-// Modal styles...
+// Modal…
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0; left: 0; width: 100%; height: 100%;
@@ -208,56 +228,49 @@ export default function Team() {
   const [tickets, setTickets] = useState([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
 
-  // 1) load user dept & ticket counts
+  // 1) fetch user dept & ticket counts
   useEffect(() => {
     (async () => {
       try {
-        const storedUsername = localStorage.getItem("username");
-        if (!storedUsername) return;
+        const email = localStorage.getItem("username");
+        if (!email) return;
         const { data: user } = await axios.get(
           `${API_BASE_URL}/api/user`,
-          { params: { email: storedUsername } }
+          { params: { email } }
         );
         setUserDept(user.Dept);
 
-        // collect all EmpIDs
+        // gather all EmpIDs
         const allIDs = [];
         (function collect(n) {
           allIDs.push(n.EmpID);
           n.children.forEach(collect);
         })(IT_ORG);
 
-        const promises = allIDs.map((empID) =>
-          axios
-            .get(`${API_BASE_URL}/api/tickets`, {
-              params: { mode: "assignedToMe", empID },
-            })
-            .then((res) => {
-              const open = (res.data.tickets || []).filter(
-                (t) =>
-                  !t.TStatus ||
-                  !["closed", "resolved"].includes(
-                    t.TStatus.toLowerCase()
-                  )
-              );
-              return { empID, count: open.length };
-            })
+        // fetch counts
+        const promises = allIDs.map(empID =>
+          axios.get(`${API_BASE_URL}/api/tickets`, {
+            params: { mode: "assignedToMe", empID },
+          }).then(res => ({
+            empID,
+            count: (res.data.tickets || []).filter(
+              t => !t.TStatus ||
+                   !["closed","resolved"].includes(t.TStatus.toLowerCase())
+            ).length,
+          }))
         );
         const results = await Promise.all(promises);
-        setTicketCounts(
-          results.reduce(
-            (acc, { empID, count }) => ((acc[empID] = count), acc),
-            {}
-          )
-        );
+        const counts = {};
+        results.forEach(r => counts[r.empID] = r.count);
+        setTicketCounts(counts);
       } catch (err) {
-        console.error(err);
+        console.error("Error loading counts", err);
       }
     })();
   }, []);
 
-  // 2) open modal for that person's tickets
-  const openModal = async (emp) => {
+  // 2) modal open
+  const openModal = async emp => {
     if (userDept !== "IT") return;
     setSelected(emp);
     setTicketsLoading(true);
@@ -266,11 +279,8 @@ export default function Team() {
         params: { mode: "assignedToMe", empID: emp.EmpID },
       });
       const open = (res.data.tickets || []).filter(
-        (t) =>
-          !t.TStatus ||
-          !["closed", "resolved"].includes(
-            t.TStatus.toLowerCase()
-          )
+        t => !t.TStatus ||
+             !["closed","resolved"].includes(t.TStatus.toLowerCase())
       );
       setTickets(open);
     } catch {
@@ -285,77 +295,152 @@ export default function Team() {
   };
 
   // 3) reassign
-  const reassignToMe = async (ticketNumber) => {
+  const reassignToMe = async ticketNumber => {
     const rawEmp = localStorage.getItem("empID");
     const rawEmail = localStorage.getItem("username");
     if (!rawEmp || !rawEmail) {
       return alert("Session expired—please log in again.");
     }
-    const UserID = rawEmail.includes("@")
-      ? rawEmail
-      : `${rawEmail}@premierenergies.com`;
+    const UserID = rawEmail.includes("@") ? rawEmail : rawEmail + "@premierenergies.com";
     try {
       const { data: details } = await axios.get(
         `${API_BASE_URL}/api/ticket-details`,
         { params: { ticketNumber } }
       );
-      const payload = {
+      await axios.post(`${API_BASE_URL}/api/update-ticket`, {
         ...details,
         Assignee_EmpID: rawEmp,
         UserID,
         Comment: "Reassigned via Team page",
-      };
-      await axios.post(
-        `${API_BASE_URL}/api/update-ticket`,
-        payload
-      );
-      setTickets((tks) =>
-        tks.filter((t) => t.Ticket_Number !== ticketNumber)
-      );
+      });
+      setTickets(t => t.filter(x => x.Ticket_Number !== ticketNumber));
     } catch (err) {
-      alert(
-        "Reassign failed: " +
-          (err.response?.data?.message || err.message)
-      );
+      alert("Reassign failed: " + (err.response?.data?.message || err.message));
     }
   };
 
-  // 4) render tree
-  const renderNode = (node, level = 0) => (
-    <TreeNode key={node.EmpID} level={level}>
-      <TeamMemberCard
-        clickable={userDept === "IT"}
-        onClick={() => openModal(node)}
-      >
-        <TeamMemberName>{node.EmpName}</TeamMemberName>
-        <TeamMemberDetails>{node.title}</TeamMemberDetails>
-        <TicketCount>
-          {ticketCounts[node.EmpID] ?? 0} open ticket
-          {(ticketCounts[node.EmpID] ?? 0) !== 1 ? "s" : ""}
-        </TicketCount>
-      </TeamMemberCard>
-      {node.children.map((ch) => renderNode(ch, level + 1))}
-    </TreeNode>
-  );
+  // split out first two as managers, rest as bottom
+  const [mgrA, mgrB, ...others] = IT_ORG.children;
 
   return (
     <Container>
       <Sidebar activeTab="Team Structure" />
       <Content>
         <Title>IT Department Org Chart</Title>
-        {renderNode(IT_ORG)}
+        <Chart>
+
+          {/* SVG connectors from Ramesh down to both managers */}
+          <ConnectorSvg>
+            <defs>
+              <marker
+                id="arrow"
+                markerWidth="6"
+                markerHeight="6"
+                refX="5"
+                refY="3"
+                orient="auto"
+              >
+                <path d="M0,0 L0,6 L6,3 z" fill="#ccc" />
+              </marker>
+            </defs>
+            {/* line to Krishna (25% across, ~120px down) */}
+            <line
+              x1="50%"
+              y1="40px"
+              x2="25%"
+              y2="140px"
+              stroke="#ccc"
+              strokeWidth="2"
+              markerEnd="url(#arrow)"
+            />
+            {/* line to Kishore (75% across, ~140px down) */}
+            <line
+              x1="50%"
+              y1="40px"
+              x2="75%"
+              y2="140px"
+              stroke="#ccc"
+              strokeWidth="2"
+              markerEnd="url(#arrow)"
+            />
+          </ConnectorSvg>
+
+          {/* Ramesh */}
+          <TeamMemberCard clickable={false} style={{ margin: "0 auto" }}>
+            <TeamMemberName>{IT_ORG.EmpName}</TeamMemberName>
+            <TeamMemberDetails>{IT_ORG.title}</TeamMemberDetails>
+            <TicketCount>
+              {ticketCounts[IT_ORG.EmpID] || 0} open ticket
+              {(ticketCounts[IT_ORG.EmpID] || 0) !== 1 && "s"}
+            </TicketCount>
+          </TeamMemberCard>
+
+          {/* two direct managers */}
+          <MiddleRow>
+            {[mgrA, mgrB].map(m => (
+              <Column key={m.EmpID}>
+                <TeamMemberCard
+                  clickable={userDept === "IT"}
+                  onClick={() => openModal(m)}
+                >
+                  <TeamMemberName>{m.EmpName}</TeamMemberName>
+                  <TeamMemberDetails>{m.title}</TeamMemberDetails>
+                  <TicketCount>
+                    {ticketCounts[m.EmpID] || 0} open ticket
+                    {(ticketCounts[m.EmpID] || 0) !== 1 && "s"}
+                  </TicketCount>
+                </TeamMemberCard>
+
+                {/* manager’s own reportees */}
+                {m.children.map(c => (
+                  <React.Fragment key={c.EmpID}>
+                    <CssConnector length="20px" />
+                    <TeamMemberCard
+                      clickable={userDept === "IT"}
+                      onClick={() => openModal(c)}
+                    >
+                      <TeamMemberName>{c.EmpName}</TeamMemberName>
+                      <TeamMemberDetails>{c.title}</TeamMemberDetails>
+                      <TicketCount>
+                        {ticketCounts[c.EmpID] || 0} open ticket
+                        {(ticketCounts[c.EmpID] || 0) !== 1 && "s"}
+                      </TicketCount>
+                    </TeamMemberCard>
+                  </React.Fragment>
+                ))}
+              </Column>
+            ))}
+          </MiddleRow>
+
+          {/* bottom row — remaining direct reportees */}
+          <BottomRow>
+            {others.map(o => (
+              <TeamMemberCard
+                key={o.EmpID}
+                clickable={userDept === "IT"}
+                onClick={() => openModal(o)}
+                className="bottom"
+              >
+                <TeamMemberName>{o.EmpName}</TeamMemberName>
+                <TeamMemberDetails>{o.title}</TeamMemberDetails>
+                <TicketCount>
+                  {ticketCounts[o.EmpID] || 0} open ticket
+                  {(ticketCounts[o.EmpID] || 0) !== 1 && "s"}
+                </TicketCount>
+              </TeamMemberCard>
+            ))}
+          </BottomRow>
+        </Chart>
       </Content>
 
+      {/* Modal for open tickets */}
       {selected && (
         <ModalOverlay onClick={closeModal}>
-          <ModalContent
-            onClick={(e) => e.stopPropagation()}
-          >
+          <ModalContent onClick={e => e.stopPropagation()}>
             <ModalHeader>
               <h2>{selected.EmpName}’s Open Tickets</h2>
               <CloseBtn onClick={closeModal}>×</CloseBtn>
             </ModalHeader>
-
             {ticketsLoading ? (
               <p>Loading tickets…</p>
             ) : tickets.length === 0 ? (
@@ -371,7 +456,7 @@ export default function Team() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((t) => (
+                  {tickets.map(t => (
                     <tr key={t.Ticket_Number}>
                       <td>{t.Ticket_Number}</td>
                       <td>{t.Ticket_Title}</td>
@@ -379,9 +464,7 @@ export default function Team() {
                       {userDept === "IT" && (
                         <td>
                           <ReassignBtn
-                            onClick={() =>
-                              reassignToMe(t.Ticket_Number)
-                            }
+                            onClick={() => reassignToMe(t.Ticket_Number)}
                           >
                             Reassign to me
                           </ReassignBtn>

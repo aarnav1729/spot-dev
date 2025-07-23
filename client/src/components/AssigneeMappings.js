@@ -1,3 +1,4 @@
+// src/pages/AssigneeMappings.js
 import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
@@ -63,6 +64,8 @@ const TH = styled.th`
   border-bottom: 2px solid #ccc;
   position: sticky;
   top: 0;
+  cursor: pointer;
+  user-select: none;
 `;
 const TD = styled.td`
   padding: 12px;
@@ -75,6 +78,14 @@ const ActionIcon = styled.span`
   &:hover {
     color: #085a92;
   }
+`;
+const FilterInput = styled.input`
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
 `;
 
 const ModalOverlay = styled.div`
@@ -160,6 +171,17 @@ const CancelButton = styled.button`
 export default function AssigneeMappings() {
   const navigate = useNavigate();
   const [mappings, setMappings] = useState([]);
+  const [columnFilters, setColumnFilters] = useState({
+    company: "",
+    location: "",
+    department: "",
+    subdept: "",
+    subtask: "",
+    task_label: "",
+    ticket_type: "",
+    assignee_empid: "",
+  });
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
   // dropdown options
   const [locationsOpts, setLocationsOpts] = useState([]);
@@ -292,7 +314,7 @@ export default function AssigneeMappings() {
       Assignee_EmpID: pick("Assignee_EmpID"),
     };
 
-    // append newly created "Other" into our local options so next time it appears
+    // append newly created "Other" into local options
     const appendIfOther = (opts, f) => {
       if (form[f] === "__other" && payload[f] && !opts.includes(payload[f])) {
         opts.push(payload[f]);
@@ -306,7 +328,7 @@ export default function AssigneeMappings() {
     appendIfOther(ticketTypeOpts, "Ticket_Type");
     appendIfOther(assigneeEmpOpts, "Assignee_EmpID");
 
-    // send
+    // send create/update
     if (editingId) {
       await axios.put(
         `${API_BASE_URL}/api/assignee-mappings/${editingId}`,
@@ -344,6 +366,77 @@ export default function AssigneeMappings() {
     </FormRow>
   );
 
+  // sort handler
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  // filter + sort process
+  const processedRows = React.useMemo(() => {
+    // map EmpLocation into company/location
+    const rows = mappings.map((m) => {
+      const [company, location] = m.EmpLocation.split(/\s*-\s*/, 2);
+      return {
+        ...m,
+        company: company || "",
+        location: location || "",
+        department: m.Department,
+        subdept: m.SubDept,
+        subtask: m.SubTask,
+        task_label: m.Task_Label,
+        ticket_type: m.Ticket_Type,
+        assignee_empid: String(m.Assignee_EmpID),
+      };
+    });
+
+    // apply column filters
+    const filtered = rows.filter((r) =>
+      Object.entries(columnFilters).every(([col, val]) =>
+        val === ""
+          ? true
+          : r[col].toLowerCase().includes(val.toLowerCase())
+      )
+    );
+
+    // apply sorting
+    if (sortConfig.key) {
+      const { key, direction } = sortConfig;
+      filtered.sort((a, b) => {
+        const aVal = a[key] ?? "";
+        const bVal = b[key] ?? "";
+        if (!isNaN(Number(aVal)) && !isNaN(Number(bVal))) {
+          return direction === "asc"
+            ? Number(aVal) - Number(bVal)
+            : Number(bVal) - Number(aVal);
+        }
+        return direction === "asc"
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      });
+    }
+
+    return filtered;
+  }, [mappings, columnFilters, sortConfig]);
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setColumnFilters((f) => ({ ...f, [name]: value }));
+  };
+
+  // render sort indicator
+  const SortIndicator = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return null;
+    return sortConfig.direction === "asc" ? " ▲" : " ▼";
+  };
+
   return (
     <Container>
       <Sidebar activeTab="Assignee Mappings" />
@@ -358,31 +451,116 @@ export default function AssigneeMappings() {
         <Table>
           <thead>
             <tr>
-              <TH>Location</TH>
-              <TH>Department</TH>
-              <TH>SubDept</TH>
-              <TH>SubTask</TH>
-              <TH>Task Label</TH>
-              <TH>Ticket Type</TH>
-              <TH>Assignee EmpID</TH>
+              <TH onClick={() => handleSort("company")}>
+                Company<SortIndicator columnKey="company" />
+              </TH>
+              <TH onClick={() => handleSort("location")}>
+                Location<SortIndicator columnKey="location" />
+              </TH>
+              <TH onClick={() => handleSort("department")}>
+                Department<SortIndicator columnKey="department" />
+              </TH>
+              <TH onClick={() => handleSort("subdept")}>
+                SubDept<SortIndicator columnKey="subdept" />
+              </TH>
+              <TH onClick={() => handleSort("subtask")}>
+                SubTask<SortIndicator columnKey="subtask" />
+              </TH>
+              <TH onClick={() => handleSort("task_label")}>
+                Task Label<SortIndicator columnKey="task_label" />
+              </TH>
+              <TH onClick={() => handleSort("ticket_type")}>
+                Ticket Type<SortIndicator columnKey="ticket_type" />
+              </TH>
+              <TH onClick={() => handleSort("assignee_empid")}>
+                Assignee EmpID<SortIndicator columnKey="assignee_empid" />
+              </TH>
               <TH style={{ width: 120 }}>Actions</TH>
+            </tr>
+            <tr>
+              <TH>
+                <FilterInput
+                  name="company"
+                  value={columnFilters.company}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="location"
+                  value={columnFilters.location}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="department"
+                  value={columnFilters.department}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="subdept"
+                  value={columnFilters.subdept}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="subtask"
+                  value={columnFilters.subtask}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="task_label"
+                  value={columnFilters.task_label}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="ticket_type"
+                  value={columnFilters.ticket_type}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH>
+                <FilterInput
+                  name="assignee_empid"
+                  value={columnFilters.assignee_empid}
+                  onChange={handleFilterChange}
+                  placeholder="Filter…"
+                />
+              </TH>
+              <TH />
             </tr>
           </thead>
           <tbody>
-            {mappings.map((m) => (
-              <tr key={m.MappingID}>
-                <TD>{m.EmpLocation}</TD>
-                <TD>{m.Department}</TD>
-                <TD>{m.SubDept}</TD>
-                <TD>{m.SubTask}</TD>
-                <TD>{m.Task_Label}</TD>
-                <TD>{m.Ticket_Type}</TD>
-                <TD>{m.Assignee_EmpID}</TD>
+            {processedRows.map((r) => (
+              <tr key={r.MappingID}>
+                <TD>{r.company}</TD>
+                <TD>{r.location}</TD>
+                <TD>{r.department}</TD>
+                <TD>{r.subdept}</TD>
+                <TD>{r.subtask}</TD>
+                <TD>{r.task_label}</TD>
+                <TD>{r.ticket_type}</TD>
+                <TD>{r.assignee_empid}</TD>
                 <TD>
-                  <ActionIcon onClick={() => openEdit(m)}>
+                  <ActionIcon onClick={() => openEdit(r)}>
                     <FaEdit />
                   </ActionIcon>
-                  <ActionIcon onClick={() => handleDelete(m.MappingID)}>
+                  <ActionIcon onClick={() => handleDelete(r.MappingID)}>
                     <FaTrash />
                   </ActionIcon>
                 </TD>

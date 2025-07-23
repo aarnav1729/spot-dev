@@ -14,6 +14,7 @@ require("isomorphic-fetch");
 dotenv.config();
 
 const app = express();
+
 const path = require("path");
 
 const allowedOrigins = [
@@ -43,10 +44,10 @@ app.use(express.static(path.join(__dirname, "..", "client", "build")));
 // Database configuration
 const dbConfig = {
   user: "SPOT_USER",
-  password: "Premier#3801",
+  password: "Marvik#72@",
   server: "10.0.40.10",
   port: 1433,
-  database: "SPOT",
+  database: "SPOT_2",
   options: {
     trustServerCertificate: true,
     encrypt: false,
@@ -163,27 +164,14 @@ app.post("/api/send-otp", async (req, res) => {
   try {
     await sql.connect(dbConfig);
 
-    // NEW: Check if an account already exists in Login table (LPassword is not null)
-    const loginCheck =
-      await sql.query`SELECT LPassword FROM Login WHERE Username = ${fullEmail}`;
-    if (
-      loginCheck.recordset.length > 0 &&
-      loginCheck.recordset[0].LPassword !== null
-    ) {
-      return res.status(400).json({
-        message:
-          "An account associated with this email already exists, please login instead",
-      });
-    }
-
     // Query to check if email exists in EMP table and ActiveFlag is 1
     const result =
       await sql.query`SELECT EmpID FROM EMP WHERE EmpEmail = ${fullEmail} AND ActiveFlag = 1`;
     if (result.recordset.length > 0) {
       const empID = result.recordset[0].EmpID;
 
-      // Generate a 6-digit OTP
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      // Generate a 4-digit OTP
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
       const expiryTime = new Date(Date.now() + 5 * 60000); // 5 minutes from now
 
       // Insert or update OTP and expiry in Login table
@@ -261,7 +249,7 @@ app.post("/api/send-otp-reset", async (req, res) => {
     const empID = empResult.recordset[0].EmpID;
 
     // 3) Generate & store a fresh OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const expiryTime = new Date(Date.now() + 5 * 60000);
     await sql.query`
       MERGE Login AS target
@@ -291,37 +279,272 @@ app.post("/api/send-otp-reset", async (req, res) => {
   }
 });
 
+// --- Categories CRUD ---
+app.get("/api/categories", async (req, res) => {
+  const { recordset } = await req.db
+    .request()
+    .query(
+      "SELECT CategoryID as id, CategoryName as name FROM Categories ORDER BY CategoryName"
+    );
+  res.json(recordset);
+});
+
+app.post("/api/categories", async (req, res) => {
+  const { name } = req.body;
+  await req.db
+    .request()
+    .input("name", sql.NVarChar(100), name)
+    .query("INSERT INTO Categories (CategoryName) VALUES (@name)");
+  res.status(201).end();
+});
+
+app.put("/api/categories/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  await req.db
+    .request()
+    .input("id", sql.Int, id)
+    .input("name", sql.NVarChar(100), name)
+    .query("UPDATE Categories SET CategoryName = @name WHERE CategoryID = @id");
+  res.status(204).end();
+});
+
+app.delete("/api/categories/:id", async (req, res) => {
+  const { id } = req.params;
+  await req.db
+    .request()
+    .input("id", sql.Int, id)
+    .query("DELETE FROM Categories WHERE CategoryID = @id");
+  res.status(204).end();
+});
+
+// --- Subcategories CRUD ---
+app.get("/api/subcategories", async (req, res) => {
+  const { categoryId } = req.query;
+  const { recordset } = await req.db
+    .request()
+    .input("cid", sql.Int, categoryId)
+    .query(
+      "SELECT SubcategoryID as id, SubcategoryName as name FROM Subcategories WHERE CategoryID = @cid ORDER BY SubcategoryName"
+    );
+  res.json(recordset);
+});
+
+// ── Categories + Subcategories hierarchy ─────────────────────────────────────
+app.get("/api/categories-with-subcategories", async (req, res) => {
+  try {
+    // fetch all categories and their subcategories
+    const result = await req.db.request().query(`
+        SELECT
+          c.CategoryID   AS categoryId,
+          c.CategoryName AS categoryName,
+          s.SubcategoryID   AS subcategoryId,
+          s.SubcategoryName AS subcategoryName
+        FROM Categories c
+        LEFT JOIN Subcategories s
+          ON c.CategoryID = s.CategoryID
+        ORDER BY c.CategoryName, s.SubcategoryName;
+      `);
+
+    // group into hierarchy
+    const rows = result.recordset;
+    const map = new Map();
+
+    for (const {
+      categoryId,
+      categoryName,
+      subcategoryId,
+      subcategoryName,
+    } of rows) {
+      if (!map.has(categoryId)) {
+        map.set(categoryId, {
+          id: categoryId,
+          name: categoryName,
+          subcategories: [],
+        });
+      }
+      if (subcategoryId != null) {
+        map.get(categoryId).subcategories.push({
+          id: subcategoryId,
+          name: subcategoryName,
+        });
+      }
+    }
+
+    // return as array
+    res.json(Array.from(map.values()));
+  } catch (err) {
+    console.error("Error fetching category hierarchy:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ── Departments + Sub‑Departments from Assignees ─────────────────────────────
+app.get("/api/assignee-categories", async (req, res) => {
+  try {
+    // grab every (Department, SubDept) combo
+    const { recordset } = await req.db.request().query(`
+      SELECT DISTINCT
+        Department   AS category,
+        SubDept      AS subcategory
+      FROM Assignees
+      ORDER BY Department, SubDept;
+    `);
+
+    // group into a hierarchy: { category: [ subcategory, … ] }
+    const map = new Map();
+    for (const { category, subcategory } of recordset) {
+      if (!map.has(category)) {
+        map.set(category, new Set());
+      }
+      if (subcategory) {
+        map.get(category).add(subcategory);
+      }
+    }
+
+    // format as array of { category, subcategories: […] }
+    const result = Array.from(map.entries()).map(([category, subs]) => ({
+      category,
+      subcategories: Array.from(subs),
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error fetching assignee‐mapping categories:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ── SubTasks + Task_Labels from Assignees ────────────────────────────────────
+app.get("/api/assignee-subtasks", async (req, res) => {
+  const { department, subdept } = req.query;
+  try {
+    // pull every SubTask / Task_Label combo for that dept + subdept
+    const request = req.db
+      .request()
+      .input("dept", sql.NVarChar(100), department || "")
+      .input("sd", sql.NVarChar(100), subdept || "");
+    const { recordset } = await request.query(`
+      SELECT DISTINCT
+        SubTask    AS subtask,
+        Task_Label AS taskLabel
+      FROM Assignees
+      WHERE (@dept = '' OR Department = @dept)
+        AND (@sd   = '' OR SubDept    = @sd)
+      ORDER BY SubTask, Task_Label;
+    `);
+
+    // group into hierarchy: { subtask, taskLabels: [...] }
+    const map = new Map();
+    for (const { subtask, taskLabel } of recordset) {
+      if (!map.has(subtask)) {
+        map.set(subtask, []);
+      }
+      if (taskLabel) {
+        map.get(subtask).push(taskLabel);
+      }
+    }
+
+    // format as array
+    const result = Array.from(map.entries()).map(([subtask, labels]) => ({
+      subtask,
+      taskLabels: labels,
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error fetching SubTasks + Task_Labels:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// === replace or move this into your list of endpoints ===
+app.get("/api/ticket-locations", async (req, res) => {
+  const { companyCode } = req.query;
+  if (!companyCode) {
+    return res
+      .status(400)
+      .json({ message: "companyCode query parameter is required" });
+  }
+
+  try {
+    const result = await req.db
+      .request()
+      .input("companyCode", sql.Int, companyCode).query(`
+        SELECT 
+          LocationID, 
+          LocationName 
+        FROM dbo.Locations
+        WHERE CompanyCode = @companyCode
+        ORDER BY LocationName
+      `);
+
+    res.status(200).json(result.recordset);
+  } catch (err) {
+    console.error("Error fetching locations:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.post("/api/subcategories", async (req, res) => {
+  const { categoryId, name } = req.body;
+  await req.db
+    .request()
+    .input("cid", sql.Int, categoryId)
+    .input("name", sql.NVarChar(100), name)
+    .query(
+      "INSERT INTO Subcategories (CategoryID, SubcategoryName) VALUES (@cid, @name)"
+    );
+  res.status(201).end();
+});
+
+app.put("/api/subcategories/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  await req.db
+    .request()
+    .input("id", sql.Int, id)
+    .input("name", sql.NVarChar(100), name)
+    .query(
+      "UPDATE Subcategories SET SubcategoryName = @name WHERE SubcategoryID = @id"
+    );
+  res.status(204).end();
+});
+
+app.delete("/api/subcategories/:id", async (req, res) => {
+  const { id } = req.params;
+  await req.db
+    .request()
+    .input("id", sql.Int, id)
+    .query("DELETE FROM Subcategories WHERE SubcategoryID = @id");
+  res.status(204).end();
+});
+
 // API endpoint to verify OTP
 app.post("/api/verify-otp", async (req, res) => {
   const { email, otp } = req.body;
   const fullEmail = `${email}@premierenergies.com`;
 
   try {
-    // Connect to the database
-    await sql.connect(dbConfig);
-
-    // Query to verify OTP and check expiry
     const result = await sql.query`
-        SELECT OTP, OTP_Expiry FROM Login WHERE Username = ${fullEmail} AND OTP = ${otp}
-      `;
-
-    if (result.recordset.length > 0) {
-      const otpExpiry = result.recordset[0].OTP_Expiry;
-      const currentTime = new Date();
-
-      if (currentTime < otpExpiry) {
-        // OTP is valid
-        res.status(200).json({ message: "OTP verified successfully" });
-      } else {
-        // OTP has expired
-        res
-          .status(400)
-          .json({ message: "OTP has expired. Please request a new one." });
-      }
-    } else {
-      // OTP is incorrect
-      res.status(400).json({ message: "Invalid OTP" });
+      SELECT OTP, OTP_Expiry, LEmpID 
+      FROM Login 
+      WHERE Username = ${fullEmail} AND OTP = ${otp}
+    `;
+    if (result.recordset.length === 0) {
+      return res.status(400).json({ message: "Invalid OTP" });
     }
+    const { OTP_Expiry, LEmpID } = result.recordset[0];
+    if (new Date() > OTP_Expiry) {
+      return res
+        .status(400)
+        .json({ message: "OTP has expired. Please request a new one." });
+    }
+    // success → return empID
+    return res.status(200).json({
+      message: "OTP verified successfully",
+      empID: LEmpID,
+    });
   } catch (error) {
     console.error("Error:", error);
     res.status(500).json({ message: "Server error" });
@@ -410,7 +633,7 @@ app.get("/api/departments", async (req, res) => {
   try {
     await sql.connect(dbConfig);
 
-    const result = await sql.query`SELECT DISTINCT Department FROM Assignee`;
+    const result = await sql.query`SELECT DISTINCT Department FROM Assignees`;
 
     const departments = result.recordset.map((row) => row.Department);
 
@@ -429,7 +652,7 @@ app.get("/api/subdepartments", async (req, res) => {
     await sql.connect(dbConfig);
 
     const result = await sql.query`
-        SELECT DISTINCT SubDept FROM Assignee WHERE Department = ${department}
+        SELECT DISTINCT SubDept FROM Assignees WHERE Department = ${department}
       `;
 
     const subDepartments = result.recordset.map((row) => row.SubDept);
@@ -449,7 +672,7 @@ app.get("/api/subtasks", async (req, res) => {
     await sql.connect(dbConfig);
 
     const result = await sql.query`
-        SELECT DISTINCT SubTask FROM Assignee WHERE Department = ${department} AND SubDept = ${subdepartment}
+        SELECT DISTINCT SubTask FROM Assignees WHERE Department = ${department} AND SubDept = ${subdepartment}
       `;
 
     const subTasks = result.recordset.map((row) => row.SubTask);
@@ -469,7 +692,7 @@ app.get("/api/tasklabels", async (req, res) => {
     await sql.connect(dbConfig);
 
     const result = await sql.query`
-        SELECT DISTINCT Task_Label FROM Assignee WHERE Department = ${department} AND SubDept = ${subdepartment} AND SubTask = ${subtask}
+        SELECT DISTINCT Task_Label FROM Assignees WHERE Department = ${department} AND SubDept = ${subdepartment} AND SubTask = ${subtask}
       `;
 
     const taskLabels = result.recordset.map((row) => row.Task_Label);
@@ -498,6 +721,7 @@ app.post(
       createdForEmail,
       incidentReportedDate,
       incidentReportedTime,
+      location: selectedLocation,
     } = req.body;
 
     // Determine which username to use as reporter
@@ -538,16 +762,18 @@ app.post(
         EmpEmail: reporterEmailFull,
       } = reporterResult.recordset[0];
 
+      const reporterLocation = selectedLocation;
+
       // 2) Find the correct assignee for the ticket criteria
       const assigneeResult = await sql.query`
-        SELECT Assignee_EmpID
-        FROM Assignee
-        WHERE EmpLocation = ${empLocation}
-          AND Department = ${department}
-          AND SubDept = ${subDepartment}
-          AND Subtask = ${subTask}
-          AND Task_Label = ${taskLabel}
-      `;
+            SELECT Assignee_EmpID
+            FROM Assignees
+            WHERE EmpLocation = ${reporterLocation}
+              AND Department = ${department}
+              AND SubDept    = ${subDepartment}
+              AND Subtask    = ${subTask}
+              AND Task_Label = ${taskLabel}
+          `;
 
       if (assigneeResult.recordset.length === 0) {
         return res
@@ -654,7 +880,7 @@ app.post(
         ${subTask},                -- 8
         ${taskLabel},              -- 9
         ${assigneeEmpID},          -- 10
-        ${empLocation},            -- 11
+        ${reporterLocation},       -- 11
         ${reporterDept},           -- 12
         ${reporterEmpID},          -- 13
         ${reporterName},           -- 14
@@ -886,6 +1112,29 @@ app.post("/api/acknowledge-ticket", async (req, res) => {
   }
 });
 
+// right after your existing mappings‐CRUD:
+app.get("/api/assignees", async (req, res) => {
+  try {
+    const { recordset } = await req.db.request().query(`
+      SELECT 
+        MappingID,
+        EmpLocation,
+        Department,
+        SubDept,
+        SubTask,
+        Task_Label,
+        Ticket_Type,
+        Assignee_EmpID
+      FROM Assignees
+      ORDER BY MappingID
+    `);
+    res.json(recordset);
+  } catch (err) {
+    console.error("Error fetching Assignees:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // In server.js, add this endpoint below your other API endpoints
 app.post("/api/forgot-password", async (req, res) => {
   const { email, password } = req.body;
@@ -914,7 +1163,7 @@ app.get("/api/isAssignee", async (req, res) => {
   try {
     await sql.connect(dbConfig);
     const result =
-      await sql.query`SELECT COUNT(*) as count FROM Assignee WHERE Assignee_EmpID = ${empID}`;
+      await sql.query`SELECT COUNT(*) as count FROM Assignees WHERE Assignee_EmpID = ${empID}`;
     const isAssignee = result.recordset[0].count > 0;
     res.status(200).json({ isAssignee });
   } catch (error) {
@@ -1450,7 +1699,7 @@ app.get("/api/assignee-mappings", async (req, res) => {
         Task_Label,
         Ticket_Type,
         Assignee_EmpID
-      FROM Assignee
+      FROM Assignees
       ORDER BY MappingID
     `);
     res.status(200).json(result.recordset);
@@ -1540,7 +1789,7 @@ app.delete("/api/assignee-mappings/:id", async (req, res) => {
     await req.db
       .request()
       .input("id", sql.Int, id)
-      .query(`DELETE FROM Assignee WHERE MappingID = @id`);
+      .query(`DELETE FROM Assignees WHERE MappingID = @id`);
     res.status(200).json({ message: "Mapping deleted" });
   } catch (err) {
     console.error("Error deleting mapping:", err);
@@ -1672,14 +1921,99 @@ app.get("/api/companies", async (req, res) => {
   }
 });
 
+// GET all locations
+app.get("/api/spotLocations", async (req, res) => {
+  try {
+    const result = await req.db.request().query(`
+      SELECT LocationID, CompanyCode, LocationName
+      FROM dbo.Locations
+    `);
+    res.status(200).json(result.recordset);
+  } catch (err) {
+    console.error("Error fetching locations:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// CREATE a new location
+app.post("/api/spotLocations", async (req, res) => {
+  const { CompanyCode, LocationName } = req.body;
+  try {
+    const result = await req.db
+      .request()
+      .input("cc", sql.Int, CompanyCode)
+      .input("name", sql.NVarChar(255), LocationName)
+      .query(`
+        INSERT INTO dbo.Locations (CompanyCode, LocationName)
+        OUTPUT inserted.LocationID, inserted.CompanyCode, inserted.LocationName
+        VALUES (@cc, @name)
+      `);
+
+    res.status(201).json(result.recordset[0]);
+  } catch (err) {
+    console.error("Error creating location:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// UPDATE an existing location
+app.put("/api/spotLocations/:id", async (req, res) => {
+  const { id } = req.params;
+  const { CompanyCode, LocationName } = req.body;
+  try {
+    const result = await req.db
+      .request()
+      .input("id", sql.Int, id)
+      .input("cc", sql.Int, CompanyCode)
+      .input("name", sql.NVarChar(255), LocationName)
+      .query(`
+        UPDATE dbo.Locations
+        SET CompanyCode = @cc,
+            LocationName = @name
+        WHERE LocationID = @id;
+
+        SELECT LocationID, CompanyCode, LocationName
+        FROM dbo.Locations
+        WHERE LocationID = @id;
+      `);
+
+    if (!result.recordset.length) {
+      return res.status(404).json({ message: "Location not found" });
+    }
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("Error updating location:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// DELETE a location
+app.delete("/api/spotLocations/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await req.db
+      .request()
+      .input("id", sql.Int, id)
+      .query(`
+        DELETE FROM dbo.Locations
+        WHERE LocationID = @id
+      `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ message: "Location not found" });
+    }
+    res.json({ message: "Location deleted" });
+  } catch (err) {
+    console.error("Error deleting location:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // GET one company by code
 app.get("/api/companies/:code", async (req, res) => {
   const { code } = req.params;
   try {
-    const result = await req.db
-      .request()
-      .input("code", sql.Int, code)
-      .query(`
+    const result = await req.db.request().input("code", sql.Int, code).query(`
         SELECT CompanyCode, CompanyShortName, CompanyName
         FROM dbo.Companies
         WHERE CompanyCode = @code
@@ -1702,8 +2036,7 @@ app.post("/api/companies", async (req, res) => {
       .request()
       .input("code", sql.Int, CompanyCode)
       .input("short", sql.NVarChar(50), CompanyShortName)
-      .input("name", sql.NVarChar(255), CompanyName)
-      .query(`
+      .input("name", sql.NVarChar(255), CompanyName).query(`
         INSERT INTO dbo.Companies (CompanyCode, CompanyShortName, CompanyName)
         VALUES (@code, @short, @name)
       `);
@@ -1723,8 +2056,7 @@ app.put("/api/companies/:code", async (req, res) => {
       .request()
       .input("code", sql.Int, code)
       .input("short", sql.NVarChar(50), CompanyShortName)
-      .input("name", sql.NVarChar(255), CompanyName)
-      .query(`
+      .input("name", sql.NVarChar(255), CompanyName).query(`
         UPDATE dbo.Companies
         SET CompanyShortName = @short,
             CompanyName      = @name
@@ -1744,10 +2076,7 @@ app.put("/api/companies/:code", async (req, res) => {
 app.delete("/api/companies/:code", async (req, res) => {
   const { code } = req.params;
   try {
-    const result = await req.db
-      .request()
-      .input("code", sql.Int, code)
-      .query(`
+    const result = await req.db.request().input("code", sql.Int, code).query(`
         DELETE FROM dbo.Companies
         WHERE CompanyCode = @code
       `);
@@ -2086,9 +2415,7 @@ app.get("/api/search-employees", async (req, res) => {
       ORDER BY username
     `);
 
-    const suggestions = result.recordset
-      .map((r) => r.username)
-      .slice(0, 10);
+    const suggestions = result.recordset.map((r) => r.username).slice(0, 10);
 
     return res.json(suggestions);
   } catch (err) {

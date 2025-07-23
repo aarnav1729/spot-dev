@@ -88,47 +88,45 @@ const Sidebar = ({ activeTab }) => {
   const empID = localStorage.getItem("empID");
   const [isHOD, setIsHOD] = useState(false);
 
+  const [isAssignee, setIsAssignee] = useState(false);
+
   useEffect(() => {
-    const checkHOD = async () => {
-      if (empID) {
-        try {
-          const response = await axios.get(`${API_BASE_URL}/api/isHOD`, {
-            params: { empID: empID },
-          });
-          setIsHOD(response.data.isHOD);
-        } catch (error) {
-          console.error("Error checking HOD status:", error);
-        }
-      }
-    };
-    checkHOD();
+    if (empID) {
+      axios
+        .get(`${API_BASE_URL}/api/isAssignee`, { params: { empID } })
+        .then((res) => setIsAssignee(res.data.isAssignee))
+        .catch((err) => console.error("Error checking assignee:", err));
+    }
   }, [empID]);
 
-  // Fetch the user's department and then HODID for verification (for logging purposes)
   useEffect(() => {
-    const fetchDeptAndHODID = async () => {
-      if (storedUsername && empID) {
+    if (empID) {
+      axios
+        .get(`${API_BASE_URL}/api/isHOD`, { params: { empID } })
+        .then((res) => setIsHOD(res.data.isHOD))
+        .catch((err) => console.error("Error checking HOD status:", err));
+    }
+  }, [empID]);
+
+  useEffect(() => {
+    if (storedUsername && empID) {
+      (async () => {
         try {
-          const userResponse = await axios.get(`${API_BASE_URL}/api/user`, {
+          const userRes = await axios.get(`${API_BASE_URL}/api/user`, {
             params: { email: storedUsername },
           });
-          const userDept = userResponse.data.Dept;
-          const hodResponse = await axios.get(
-            `${API_BASE_URL}/api/getHODForDept`,
-            {
-              params: { dept: userDept },
-            }
-          );
-          const hodID = hodResponse.data.HODID;
+          const userDept = userRes.data.Dept;
+          const hodRes = await axios.get(`${API_BASE_URL}/api/getHODForDept`, {
+            params: { dept: userDept },
+          });
           console.log("Logged in EmpID:", empID);
           console.log("User's Department:", userDept);
-          console.log("HODID for user's department:", hodID);
+          console.log("HODID for user's department:", hodRes.data.HODID);
         } catch (error) {
           console.error("Error fetching department or HODID:", error);
         }
-      }
-    };
-    fetchDeptAndHODID();
+      })();
+    }
   }, [storedUsername, empID]);
 
   // Logout handler
@@ -204,6 +202,24 @@ const Sidebar = ({ activeTab }) => {
               <FaBuilding />
               <SidebarItemText collapsed={collapsed}>Companies</SidebarItemText>
             </SidebarItem>
+
+            <SidebarItem
+              active={activeTab === "Locations"}
+              collapsed={collapsed}
+              onClick={() => navigate("/locations")}
+            >
+              <FaBuilding />
+              <SidebarItemText collapsed={collapsed}>Locations</SidebarItemText>
+            </SidebarItem>
+
+            <SidebarItem
+              active={activeTab === "Category"}
+              collapsed={collapsed}
+              onClick={() => navigate("/category")}
+            >
+              <FaBuilding />
+              <SidebarItemText collapsed={collapsed}>Category</SidebarItemText>
+            </SidebarItem>
           </>
         )}
 
@@ -223,18 +239,22 @@ const Sidebar = ({ activeTab }) => {
         >
           <FaPenSquare />
           <SidebarItemText collapsed={collapsed}>
-            Create IT Ticket
+            Create IT Incident
           </SidebarItemText>
         </SidebarItem>
 
-        <SidebarItem
-          active={activeTab === "IT Org Chart"}
-          collapsed={collapsed}
-          onClick={() => handleNavigation("/team")}
-        >
-          <FaUsers />
-          <SidebarItemText collapsed={collapsed}>IT Org Chart</SidebarItemText>
-        </SidebarItem>
+        {isAssignee && (
+          <SidebarItem
+            active={activeTab === "IT Org Chart"}
+            collapsed={collapsed}
+            onClick={() => handleNavigation("/team")}
+          >
+            <FaUsers />
+            <SidebarItemText collapsed={collapsed}>
+              IT Org Chart
+            </SidebarItemText>
+          </SidebarItem>
+        )}
 
         {/* Removed Priority Tasks SidebarItem 
 
