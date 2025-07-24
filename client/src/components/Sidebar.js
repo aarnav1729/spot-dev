@@ -157,7 +157,9 @@ const Sidebar = () => {
               onClick={() => handleNavigation("/department")}
             >
               <FaTasks />
-              <SidebarItemText collapsed={collapsed}>Department</SidebarItemText>
+              <SidebarItemText collapsed={collapsed}>
+                Department
+              </SidebarItemText>
             </SidebarItem>
 
             <SidebarItem
@@ -197,6 +199,17 @@ const Sidebar = () => {
               <FaListAlt />
               <SidebarItemText collapsed={collapsed}>Category</SidebarItemText>
             </SidebarItem>
+
+            <SidebarItem
+              active={location.pathname === "/team"}
+              collapsed={collapsed}
+              onClick={() => handleNavigation("/team")}
+            >
+              <FaUsers />
+              <SidebarItemText collapsed={collapsed}>
+                IT Org Chart
+              </SidebarItemText>
+            </SidebarItem>
           </>
         )}
 
@@ -219,17 +232,6 @@ const Sidebar = () => {
             Create IT Incident
           </SidebarItemText>
         </SidebarItem>
-
-        {isAssignee && (
-          <SidebarItem
-            active={location.pathname === "/team"}
-            collapsed={collapsed}
-            onClick={() => handleNavigation("/team")}
-          >
-            <FaUsers />
-            <SidebarItemText collapsed={collapsed}>IT Org Chart</SidebarItemText>
-          </SidebarItem>
-        )}
 
         <LogoutButton collapsed={collapsed} onClick={handleLogout}>
           <FaSignOutAlt />
