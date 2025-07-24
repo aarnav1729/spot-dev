@@ -187,8 +187,7 @@ app.post("/api/send-otp", async (req, res) => {
       `;
 
       // Send OTP via email with a more formal template
-      const subject =
-        "Premier Energies Ticketing Tool – Your OTP";
+      const subject = "Premier Energies Ticketing Tool – Your OTP";
       const content = `
               <p>Welcome to the Premier Energies Ticketing Tool!</p>
               <p>Your One‑Time Password (OTP) is: <strong>${otp}</strong></p>
@@ -822,7 +821,10 @@ app.post(
         .toISOString()
         .split("T")[0]
         .replace(/-/g, "");
-      const creationTimeStr = creationDate.toISOString().split("T")[1].split(".")[0];
+      const creationTimeStr = creationDate
+        .toISOString()
+        .split("T")[1]
+        .split(".")[0];
 
       // New logic to fetch the last appended serial number and increment by one
       const lastTicketResult = await sql.query`
@@ -859,14 +861,8 @@ app.post(
           ? incidentReportedTime
           : creationTimeStr;
 
-      console.log(
-        "Final Incident Reported Date:",
-        finalIncidentReportedDate
-      );
-      console.log(
-        "Final Incident Reported Time:",
-        finalIncidentReportedTime
-      );
+      console.log("Final Incident Reported Date:", finalIncidentReportedDate);
+      console.log("Final Incident Reported Time:", finalIncidentReportedTime);
 
       // **IMPORTANT:** Here we update the INSERT query to include the new "Attachment" column.
       // (You will need to add a nullable NVARCHAR column named "Attachment" to your Tickets table.)
@@ -1750,16 +1746,11 @@ app.get("/api/assignee-mappings", async (req, res) => {
 });
 
 app.post("/api/assignee-mappings", async (req, res) => {
-  const {
-    EmpLocation,
-    Department,
-    SubDept,
-    SubTask,
-    Task_Label,
-    Ticket_Type,
-    Assignee_EmpID,
-  } = req.body;
-
+  const { EmpLocation, SubTask, Task_Label, Assignee_EmpID } = req.body;
+  // hardcode department & subdept (and ticket type) to IT
+  const Department = "IT";
+  const SubDept = "IT";
+  const Ticket_Type = "Issue";
   try {
     await req.db
       .request()
@@ -1770,7 +1761,7 @@ app.post("/api/assignee-mappings", async (req, res) => {
       .input("tl", sql.NVarChar(100), Task_Label)
       .input("tt", sql.NVarChar(100), Ticket_Type)
       .input("ae", sql.NVarChar(50), Assignee_EmpID).query(`
-        INSERT INTO Assignee
+              INSERT INTO Assignees  
           (EmpLocation, Department, SubDept, SubTask, Task_Label, Ticket_Type, Assignee_EmpID)
         VALUES
           (@loc, @dept, @sd, @st, @tl, @tt, @ae)
@@ -1784,15 +1775,10 @@ app.post("/api/assignee-mappings", async (req, res) => {
 
 app.put("/api/assignee-mappings/:id", async (req, res) => {
   const { id } = req.params;
-  const {
-    EmpLocation,
-    Department,
-    SubDept,
-    SubTask,
-    Task_Label,
-    Ticket_Type,
-    Assignee_EmpID,
-  } = req.body;
+  const { EmpLocation, SubTask, Task_Label, Assignee_EmpID } = req.body;
+  const Department = "IT";
+  const SubDept = "IT";
+  const Ticket_Type = "Issue";
 
   try {
     await req.db
@@ -1805,7 +1791,7 @@ app.put("/api/assignee-mappings/:id", async (req, res) => {
       .input("tl", sql.NVarChar(100), Task_Label)
       .input("tt", sql.NVarChar(100), Ticket_Type)
       .input("ae", sql.NVarChar(50), Assignee_EmpID).query(`
-        UPDATE Assignee
+      UPDATE Assignees
         SET
           EmpLocation   = @loc,
           Department    = @dept,
@@ -1982,8 +1968,7 @@ app.post("/api/spotLocations", async (req, res) => {
     const result = await req.db
       .request()
       .input("cc", sql.Int, CompanyCode)
-      .input("name", sql.NVarChar(255), LocationName)
-      .query(`
+      .input("name", sql.NVarChar(255), LocationName).query(`
         INSERT INTO dbo.Locations (CompanyCode, LocationName)
         OUTPUT inserted.LocationID, inserted.CompanyCode, inserted.LocationName
         VALUES (@cc, @name)
@@ -2005,8 +1990,7 @@ app.put("/api/spotLocations/:id", async (req, res) => {
       .request()
       .input("id", sql.Int, id)
       .input("cc", sql.Int, CompanyCode)
-      .input("name", sql.NVarChar(255), LocationName)
-      .query(`
+      .input("name", sql.NVarChar(255), LocationName).query(`
         UPDATE dbo.Locations
         SET CompanyCode = @cc,
             LocationName = @name
@@ -2031,10 +2015,7 @@ app.put("/api/spotLocations/:id", async (req, res) => {
 app.delete("/api/spotLocations/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await req.db
-      .request()
-      .input("id", sql.Int, id)
-      .query(`
+    const result = await req.db.request().input("id", sql.Int, id).query(`
         DELETE FROM dbo.Locations
         WHERE LocationID = @id
       `);
