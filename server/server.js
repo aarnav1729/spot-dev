@@ -9,6 +9,7 @@ const upload = multer({ dest: "uploads/" });
 const http = require("http");
 const https = require("https");
 const fs = require("fs");
+const session = require("express-session");
 require("isomorphic-fetch");
 
 dotenv.config();
@@ -16,6 +17,44 @@ dotenv.config();
 const app = express();
 
 const path = require("path");
+
+// ── session / idle‑timeout (30 min) ──────────────────────
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "your‑very‑secret‑string",
+    resave: false,
+    saveUninitialized: false,
+    rolling: true, // reset cookie on every response
+    cookie: {
+      maxAge: 3 * 60 * 1000, // 30 minutes
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    },
+  })
+);
+
+// how long before we auto‑expire for inactivity?
+const IDLE_TIMEOUT = 3 * 60 * 1000; // 3 minutes (use 30*60*1000 for 30m)
+
+app.use((req, res, next) => {
+  // only check if they’re actually logged in
+  if (req.session && req.session.empID) {
+    const now = Date.now();
+    const last = req.session.lastActivity || now;
+    // if we’ve gone past the timeout, kill the session
+    if (now - last > IDLE_TIMEOUT) {
+      return req.session.destroy(err => {
+        if (err) console.error("❌ session destroy:", err);
+        res.clearCookie("connect.sid");
+        // let them fall through as “not logged in”
+        next();
+      });
+    }
+    // otherwise bump their last‐activity timestamp
+    req.session.lastActivity = now;
+  }
+  next();
+});
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -151,8 +190,8 @@ async function sendEmail(toEmail, subject, content, attachments = []) {
 // ── SESSION CHECK FOR FRONTEND ─────────────────────────────────────────────────
 // (so React can read /api/session if you choose—but SPOT keeps its own login)
 app.get("/api/session", (req, res) => {
-  // SPOT doesn’t use server-side sessions here, but you could mirror DIGI if needed
-  res.json({ loggedIn: false });
+  // now backed by our express-session
+  res.json({ loggedIn: !!req.session.empID });
 });
 
 // API endpoint to handle OTP requests
@@ -539,16 +578,30 @@ app.post("/api/verify-otp", async (req, res) => {
         .status(400)
         .json({ message: "OTP has expired. Please request a new one." });
     }
-    // success → return empID
-    return res.status(200).json({
-      message: "OTP verified successfully",
-      empID: LEmpID,
+
+    // ─── BOOTSTRAP THE SESSION ──────────────────────────────────────────
+    // if you’re worried about session fixation, you can regenerate first:
+    req.session.regenerate(err => {
+      if (err) {
+        console.error("❌ session.regenerate:", err);
+        return res.status(500).json({ message: "Server error" });
+      }
+      req.session.empID = LEmpID;
+      req.session.lastActivity = Date.now();
+      // now send back your success payload
+      res.status(200).json({
+        message: "OTP verified successfully",
+        empID: LEmpID,
+      });
     });
+    // ───────────────────────────────────────────────────────────────────
+
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error in /api/verify-otp:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // API endpoint to handle registration
 app.post("/api/register", async (req, res) => {
@@ -611,10 +664,11 @@ app.post("/api/login", async (req, res) => {
 
     if (result.recordset.length > 0) {
       // Credentials are correct
-      res.status(200).json({
-        message: "Login successful",
-        empID: result.recordset[0].LEmpID,
-      });
+      // mark session
+      req.session.empID = result.recordset[0].LEmpID;
+      res
+        .status(200)
+        .json({ message: "Login successful", empID: req.session.empID });
     } else {
       // Credentials are incorrect
       res
@@ -2411,8 +2465,11 @@ app.get("/api/getHODForDept", async (req, res) => {
 
 // Logout endpoint
 app.post("/api/logout", (req, res) => {
-  // Invalidate session here if applicable.
-  res.status(200).json({ message: "Logout successful" });
+  req.session.destroy((err) => {
+    if (err) console.error("❌ session destroy:", err);
+    res.clearCookie("connect.sid");
+    res.status(200).json({ message: "Logout successful" });
+  });
 });
 
 app.get("/api/search-employees", async (req, res) => {

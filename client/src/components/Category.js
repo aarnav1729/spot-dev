@@ -3,11 +3,7 @@ import React, { useState, useEffect } from "react";
 import styled, { css } from "styled-components";
 import Sidebar from "./Sidebar";
 import axios from "axios";
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-} from "react-beautiful-dnd";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 const API = window.location.origin;
 
@@ -51,7 +47,7 @@ const Card = styled.section`
   background: #fff;
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 `;
 const CardHeader = styled.div`
   display: flex;
@@ -79,7 +75,7 @@ const SearchInput = styled.input`
   &:focus {
     outline: none;
     border-color: #0f6ab0;
-    box-shadow: 0 0 6px rgba(15,106,176,0.2);
+    box-shadow: 0 0 6px rgba(15, 106, 176, 0.2);
   }
 `;
 const PrimaryButton = styled.button`
@@ -90,7 +86,9 @@ const PrimaryButton = styled.button`
   padding: 8px 16px;
   font-size: 14px;
   cursor: pointer;
-  &:hover { background-color: #0d5a99; }
+  &:hover {
+    background-color: #0d5a99;
+  }
 `;
 
 // ─── inline form ───────────────────────────────────────────────────────
@@ -120,7 +118,7 @@ const Input = styled.input`
   &:focus {
     outline: none;
     border-color: #0f6ab0;
-    box-shadow: 0 0 6px rgba(15,106,176,0.2);
+    box-shadow: 0 0 6px rgba(15, 106, 176, 0.2);
   }
 `;
 const FormActions = styled.div`
@@ -136,7 +134,9 @@ const SecondaryButton = styled.button`
   padding: 8px 16px;
   font-size: 14px;
   cursor: pointer;
-  &:hover { background: #f5f5f5; }
+  &:hover {
+    background: #f5f5f5;
+  }
 `;
 
 // ─── table & rows ─────────────────────────────────────────────────────
@@ -144,7 +144,8 @@ const SecondaryButton = styled.button`
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  th, td {
+  th,
+  td {
     padding: 12px;
     border-bottom: 1px solid #eee;
     font-size: 14px;
@@ -158,9 +159,11 @@ const Table = styled.table`
 `;
 const TableRow = styled.tr`
   cursor: pointer;
-  ${({ selected }) => selected && css`
-    background: rgba(15, 106, 176, 0.1);
-  `}
+  ${({ selected }) =>
+    selected &&
+    css`
+      background: rgba(15, 106, 176, 0.1);
+    `}
   &:hover {
     background: rgba(15, 106, 176, 0.05);
   }
@@ -171,7 +174,9 @@ const ActionButton = styled.button`
   color: #0f6ab0;
   cursor: pointer;
   margin-right: 8px;
-  &:hover { color: #0d5a99; }
+  &:hover {
+    color: #0d5a99;
+  }
 `;
 
 // ─── component ─────────────────────────────────────────────────────────
@@ -192,7 +197,9 @@ export default function Category() {
   // ─── fetchers ─────────────────────────────────────────────────────────
 
   // load categories once
-  useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    fetchCategories();
+  }, []);
   // when categories load, auto-select first
   useEffect(() => {
     if (!selectedCat.id && categories.length) {
@@ -213,7 +220,7 @@ export default function Category() {
     try {
       // now orders by your new Sequence column
       const { data } = await axios.get(`${API}/api/subcategories`, {
-        params: { categoryId: catId }
+        params: { categoryId: catId },
       });
       setSubcats(data);
     } catch {
@@ -228,7 +235,12 @@ export default function Category() {
     if (!catForm.name.trim()) return;
     try {
       if (catEditing) {
-        await axios.put(`${API}/api/categories/${catForm.id}`, { name: catForm.name });
+        // 1) send the update
+        await axios.put(`${API}/api/categories/${catForm.id}`, {
+          name: catForm.name,
+        });
+        // 2) immediately refresh our “selected” label
+        setSelectedCat({ id: catForm.id, name: catForm.name });
       } else {
         await axios.post(`${API}/api/categories`, { name: catForm.name });
       }
@@ -238,13 +250,19 @@ export default function Category() {
       alert("Save failed");
     }
   }
+  
   function handleCatEdit(c) {
     setCatEditing(true);
     setCatForm({ id: c.id, name: c.name });
-    handleCatSelect(c);
+    // make sure this row is highlighted…
+    setSelectedCat(c);
+    // …and (if you want) reload its subcats
+    fetchSubcats(c.id);
   }
+
   async function handleCatDelete(id) {
-    if (!window.confirm("Delete this category and all its subcategories?")) return;
+    if (!window.confirm("Delete this category and all its subcategories?"))
+      return;
     try {
       await axios.delete(`${API}/api/categories/${id}`);
       if (selectedCat.id === id) setSelectedCat({ id: null, name: "" });
@@ -271,7 +289,9 @@ export default function Category() {
     if (!subForm.name.trim() || !selectedCat.id) return;
     try {
       if (subEditing) {
-        await axios.put(`${API}/api/subcategories/${subForm.id}`, { name: subForm.name });
+        await axios.put(`${API}/api/subcategories/${subForm.id}`, {
+          name: subForm.name,
+        });
       } else {
         await axios.post(`${API}/api/subcategories`, {
           categoryId: selectedCat.id,
@@ -339,10 +359,10 @@ export default function Category() {
 
   // ── filtered lists ─────────────────────────────────────────────────────
 
-  const visibleCats = categories.filter(c =>
+  const visibleCats = categories.filter((c) =>
     c.name.toLowerCase().includes(catSearch.toLowerCase())
   );
-  const visibleSubs = subcats.filter(s =>
+  const visibleSubs = subcats.filter((s) =>
     s.name.toLowerCase().includes(subSearch.toLowerCase())
   );
 
@@ -352,7 +372,9 @@ export default function Category() {
       <Content>
         <PageHeader>
           <PageTitle>Category & Subcategory Master</PageTitle>
-          <PageSubtitle>Manage ticket categories and subcategories</PageSubtitle>
+          <PageSubtitle>
+            Manage ticket categories and subcategories
+          </PageSubtitle>
         </PageHeader>
 
         <CardsGrid>
@@ -367,7 +389,7 @@ export default function Category() {
                 <SearchInput
                   placeholder="Search categories…"
                   value={catSearch}
-                  onChange={e => setCatSearch(e.target.value)}
+                  onChange={(e) => setCatSearch(e.target.value)}
                 />
                 <PrimaryButton onClick={() => resetCatForm()}>
                   + Add Category
@@ -380,7 +402,9 @@ export default function Category() {
                 <Label>Category Name</Label>
                 <Input
                   value={catForm.name}
-                  onChange={e => setCatForm({ ...catForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setCatForm({ ...catForm, name: e.target.value })
+                  }
                   placeholder="e.g. Hardware Issues"
                   required
                 />
@@ -407,10 +431,7 @@ export default function Category() {
                         <th style={{ width: 100 }}>Actions</th>
                       </tr>
                     </thead>
-                    <tbody
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                    >
+                    <tbody ref={provided.innerRef} {...provided.droppableProps}>
                       {visibleCats.map((c, idx) => (
                         <Draggable
                           key={c.id}
@@ -424,15 +445,22 @@ export default function Category() {
                               {...prov.dragHandleProps}
                               selected={selectedCat.id === c.id}
                               onClick={(e) => {
-                                if (!e.target.closest("button")) handleCatSelect(c);
+                                if (!e.target.closest("button"))
+                                  handleCatSelect(c);
                               }}
                             >
                               <td>☰</td>
                               <td>{c.id}</td>
                               <td>{c.name}</td>
                               <td>
-                                <ActionButton onClick={() => handleCatEdit(c)}>✏️</ActionButton>
-                                <ActionButton onClick={() => handleCatDelete(c.id)}>🗑️</ActionButton>
+                                <ActionButton onClick={() => handleCatEdit(c)}>
+                                  ✏️
+                                </ActionButton>
+                                <ActionButton
+                                  onClick={() => handleCatDelete(c.id)}
+                                >
+                                  🗑️
+                                </ActionButton>
                               </td>
                             </TableRow>
                           )}
@@ -462,7 +490,7 @@ export default function Category() {
                   placeholder="Search subcategories…"
                   disabled={!selectedCat.id}
                   value={subSearch}
-                  onChange={e => setSubSearch(e.target.value)}
+                  onChange={(e) => setSubSearch(e.target.value)}
                 />
                 <PrimaryButton
                   disabled={!selectedCat.id}
@@ -480,7 +508,9 @@ export default function Category() {
                     <Label>Subcategory Name</Label>
                     <Input
                       value={subForm.name}
-                      onChange={e => setSubForm({ ...subForm, name: e.target.value })}
+                      onChange={(e) =>
+                        setSubForm({ ...subForm, name: e.target.value })
+                      }
                       placeholder="e.g. Printer Issues"
                       required
                     />
@@ -527,8 +557,16 @@ export default function Category() {
                                   <td>{s.id}</td>
                                   <td>{s.name}</td>
                                   <td>
-                                    <ActionButton onClick={() => handleSubEdit(s)}>✏️</ActionButton>
-                                    <ActionButton onClick={() => handleSubDelete(s.id)}>🗑️</ActionButton>
+                                    <ActionButton
+                                      onClick={() => handleSubEdit(s)}
+                                    >
+                                      ✏️
+                                    </ActionButton>
+                                    <ActionButton
+                                      onClick={() => handleSubDelete(s.id)}
+                                    >
+                                      🗑️
+                                    </ActionButton>
                                   </td>
                                 </TableRow>
                               )}
